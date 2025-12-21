@@ -1,0 +1,26 @@
+<!-- admin_app/templates/base.html -->
+<!DOCTYPE html>
+<html lang="en">
+    <title>UrbanResolve – Admin</title>
+<head>
+    <meta charset="UTF-8">
+    <title>CivicConnect – Admin</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<header class="nav">
+    <a href="/dashboard" class="logo">UrbanResolve Admin</a>
+    <nav class="nav-right">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/login">Logout</a>
+    </nav>
+</header>
+
+<main class="container">
+    {% block content %}{% endblock %}
+</main>
+
+</body>
+</html>

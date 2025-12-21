@@ -1,0 +1,27 @@
+<!-- public_app/templates/base.html -->
+<!DOCTYPE html>
+<html lang="en">
+    <title>UrbanResolve – Public</title>
+<head>
+    <meta charset="UTF-8">
+    <title>CivicConnect – Public</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<header class="nav">
+    <a href="/" class="logo">UrbanResolve</a>
+    <nav class="nav-right">
+        <a href="/">Home</a>
+        <a href="/report/new">Report Issue</a>
+        <a href="/login">Login</a>
+    </nav>
+</header>
+
+<main class="container">
+    {% block content %}{% endblock %}
+</main>
+
+</body>
+</html>

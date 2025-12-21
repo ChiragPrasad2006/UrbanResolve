@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>Report an Issue</h1>
+<p class="muted">Report civic problems to help authorities take action.</p>
+
+<form class="form-card" action="/report/new" method="post" enctype="multipart/form-data">
+    <label>
+        Title
+        <input type="text" name="title" required>
+    </label>
+
+    <label>
+        Category
+        <select name="category" required>
+            <option value="">Select</option>
+            <option value="Pothole">Pothole</option>
+            <option value="Streetlight">Streetlight</option>
+            <option value="Garbage">Garbage</option>
+            <option value="Water">Water Leakage</option>
+            <option value="Other">Other</option>
+        </select>
+    </label>
+
+    <label>
+        Description
+        <textarea name="description"></textarea>
+    </label>
+
+    <label>
+        Address
+        <input type="text" name="address">
+    </label>
+
+    <label>
+        Your Email
+        <input type="email" name="email" required>
+    </label>
+
+    <label>
+    Upload Image
+    <input type="file" name="image" accept="image/*">
+    </label>
+
+    <button class="btn-submit">Submit Issue</button>
+</form>
+
+{% if success %}
+<p class="success">{{ success }}</p>
+{% endif %}
+
+{% endblock %}

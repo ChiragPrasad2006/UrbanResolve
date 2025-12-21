@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>Public Issues</h1>
+<p class="muted">View civic issues reported by the community.</p>
+
+{% if success %}
+<p class="success">{{ success }}</p>
+{% endif %}
+
+{% if issues %}
+    {% for issue in issues %}
+        <div class="issue-card">
+            <h2>{{ issue.title }}</h2>
+            <p class="muted">{{ issue.category }}</p>
+
+            {% if issue.image_path %}
+            <img src="{{ issue.image_path }}" class="issue-img">
+            {% endif %}
+
+            {% if issue.address %}
+                <p>📍 {{ issue.address }}</p>
+            {% endif %}
+
+            {% if issue.description %}
+                <p>{{ issue.description }}</p>
+            {% endif %}
+
+            <p><strong>Status:</strong> {{ issue.status }}</p>
+        </div>
+    {% endfor %}
+{% else %}
+    <p>No public issues reported yet.</p>
+{% endif %}
+
+{% endblock %}

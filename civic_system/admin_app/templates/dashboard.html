@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>UrbanResolve Admin Dashboard</h1>
+<p class="muted">Manage reported civic issues.</p>
+
+{% if success %}
+<p class="success">{{ success }}</p>
+{% endif %}
+
+{% if error %}
+<p class="error">{{ error }}</p>
+{% endif %}
+
+{% if issues %}
+    {% for issue in issues %}
+        <div class="issue-card">
+            <h2>{{ issue.title }}</h2>
+            <p class="muted">{{ issue.category }}</p>
+            
+            {% if issue.image_path %}
+            <img src="{{ issue.image_path }}" class="issue-img">
+            {% endif %}
+
+            {% if issue.address %}
+                <p>📍 {{ issue.address }}</p>
+            {% endif %}
+
+            {% if issue.description %}
+                <p>{{ issue.description }}</p>
+            {% endif %}
+
+            <p><strong>Status:</strong> {{ issue.status }}</p>
+            <p><strong>Reported by:</strong> {{ issue.reporter_email }}</p>
+
+            <form action="/issue/update" method="post">
+            <input type="hidden" name="issue_id" value="{{ issue.id }}">
+
+            <select name="status" required>
+                <option value="Pending">Pending</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Resolved">Resolved</option>
+            </select>
+
+    <button class="btn-submit">Update Status</button>
+</form>
+
+        </div>
+    {% endfor %}
+{% else %}
+    <p>No issues available.</p>
+{% endif %}
+
+{% endblock %}

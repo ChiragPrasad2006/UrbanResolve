@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>UrbanResolve Login</h1>
+<p class="muted">Login using your email (OTP verification).</p>
+
+<form class="form-card" action="/login/request-otp" method="post">
+    <label>
+        Email
+        <input type="email" name="email" required value="{{ email or '' }}">
+    </label>
+    <button class="btn-submit">Send OTP</button>
+</form>
+
+<form class="form-card" action="/login/verify-otp" method="post" style="margin-top:1rem;">
+    <label>
+        Email
+        <input type="email" name="email" required value="{{ email or '' }}">
+    </label>
+
+    <label>
+        Enter OTP
+        <input type="text" name="otp" maxlength="6" required>
+    </label>
+
+    <button class="btn-submit">Verify OTP</button>
+</form>
+
+{% if message %}
+<p class="success">{{ message }}</p>
+{% endif %}
+
+{% if error %}
+<p class="error">{{ error }}</p>
+{% endif %}
+
+{% endblock %}
