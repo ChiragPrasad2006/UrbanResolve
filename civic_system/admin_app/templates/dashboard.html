@@ -154,7 +154,13 @@
                 <input type="hidden" name="resolution_longitude" id="resolution_longitude_{{ issue.id }}">
 
                 <div>
-                    <p class="muted compact">Resolution proof must be pinned near the original issue location. Uploading beyond 300 meters is blocked.</p>
+                    <label>
+                        <strong>On-site Resolution Location</strong>
+                        <p class="muted compact" style="margin: 0.5rem 0 0.75rem;">
+                            📍 Click on the map below to mark where you're uploading proof from. 
+                            The marker must be within 300 meters of the original issue location (shown in red).
+                        </p>
+                    </label>
                     <div
                         class="map-box resolution-map"
                         id="resolution_map_{{ issue.id }}"
@@ -165,6 +171,15 @@
                         data-lat-input="resolution_latitude_{{ issue.id }}"
                         data-lng-input="resolution_longitude_{{ issue.id }}"
                     ></div>
+                    <div style="background: #f0fdf4; padding: 0.75rem; border-radius: 6px; margin-top: 0.75rem; font-size: 0.9rem; border-left: 3px solid var(--success);">
+                        <strong style="color: var(--success);">✓ Coordinates auto-filled:</strong>
+                        <p style="margin: 0.5rem 0 0;">
+                            Latitude: <code id="resolution_latitude_display_{{ issue.id }}" style="background: white; padding: 0.2rem 0.4rem; border-radius: 3px;">Click map to set</code>
+                        </p>
+                        <p style="margin: 0;">
+                            Longitude: <code id="resolution_longitude_display_{{ issue.id }}" style="background: white; padding: 0.2rem 0.4rem; border-radius: 3px;">Click map to set</code>
+                        </p>
+                    </div>
                 </div>
 
                 <label>
@@ -184,78 +199,289 @@
 
 {% block extra_scripts %}
 <script>
-    const heatmapPoints = {{ heatmap_points|tojson }};
-    const heatmap = L.map('adminHeatmap').setView([20.5937, 78.9629], 5);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(heatmap);
-
-    if (heatmapPoints.length) {
-        const bounds = [];
-        heatmapPoints.forEach((point) => {
-            bounds.push([point.lat, point.lng]);
-            const color = point.category === 'Pothole'
-                ? '#dc2626'
-                : point.category === 'Garbage'
-                ? '#d97706'
-                : point.category === 'Drainage'
-                ? '#2563eb'
-                : '#0f766e';
-            L.circle([point.lat, point.lng], {
-                radius: 80 + (point.weight * 18),
-                color,
-                fillColor: color,
-                fillOpacity: 0.28,
-            }).addTo(heatmap).bindPopup(`${point.title}<br>${point.category}<br>Severity ${point.weight}`);
-        });
-        heatmap.fitBounds(bounds, { padding: [25, 25] });
-    }
-
-    document.querySelectorAll('.resolution-map').forEach((mapElement) => {
-        const issueLat = parseFloat(mapElement.dataset.issueLat);
-        const issueLng = parseFloat(mapElement.dataset.issueLng);
-        const resolutionLat = parseFloat(mapElement.dataset.resolutionLat);
-        const resolutionLng = parseFloat(mapElement.dataset.resolutionLng);
-        const latInput = document.getElementById(mapElement.dataset.latInput);
-        const lngInput = document.getElementById(mapElement.dataset.lngInput);
-
-        const initialLat = Number.isFinite(issueLat) ? issueLat : 20.5937;
-        const initialLng = Number.isFinite(issueLng) ? issueLng : 78.9629;
-        const map = L.map(mapElement.id).setView([initialLat, initialLng], Number.isFinite(issueLat) ? 16 : 5);
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '&copy; OpenStreetMap contributors'
-        }).addTo(map);
-
-        let resolutionMarker;
-        if (Number.isFinite(issueLat) && Number.isFinite(issueLng)) {
-            L.marker([issueLat, issueLng]).addTo(map).bindPopup('Original issue location').openPopup();
+    // Wait for Leaflet and DOM to be ready
+    function initMaps() {
+        // Check if Leaflet is available
+        if (typeof L === 'undefined') {
+            console.warn('Leaflet not available yet, retrying...');
+            setTimeout(initMaps, 200);
+            return;
         }
 
-        function setResolutionMarker(lat, lng) {
-            latInput.value = lat.toFixed(6);
-            lngInput.value = lng.toFixed(6);
+        console.log('🗺️ Starting map initialization...');
 
-            if (!resolutionMarker) {
-                resolutionMarker = L.marker([lat, lng], { draggable: true }).addTo(map);
-                resolutionMarker.on('dragend', (event) => {
-                    const position = event.target.getLatLng();
-                    setResolutionMarker(position.lat, position.lng);
-                });
-            } else {
-                resolutionMarker.setLatLng([lat, lng]);
+        // Initialize main heatmap
+        const heatmapPoints = {{ heatmap_points|tojson }};
+        const adminHeatmapElement = document.getElementById('adminHeatmap');
+        
+        if (adminHeatmapElement) {
+            try {
+                const heatmap = L.map('adminHeatmap').setView([20.5937, 78.9629], 5);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '&copy; OpenStreetMap contributors'
+                }).addTo(heatmap);
+
+                if (heatmapPoints.length > 0) {
+                    const bounds = [];
+                    heatmapPoints.forEach((point) => {
+                        bounds.push([point.lat, point.lng]);
+                        const color = point.category === 'Pothole'
+                            ? '#dc2626'
+                            : point.category === 'Garbage'
+                            ? '#d97706'
+                            : point.category === 'Drainage'
+                            ? '#2563eb'
+                            : '#0f766e';
+                        
+                        L.circleMarker([point.lat, point.lng], {
+                            radius: 12 + (point.weight * 3),
+                            color: color,
+                            fillColor: color,
+                            fillOpacity: 0.75,
+                            weight: 2,
+                            opacity: 0.9,
+                        }).addTo(heatmap).bindPopup(`<strong>${point.title}</strong><br>${point.category}<br>Severity ${point.weight}`);
+                    });
+
+                    if (bounds.length > 0) {
+                        heatmap.fitBounds(bounds, { padding: [50, 50] });
+                    }
+                }
+                console.log('✓ Main heatmap initialized');
+            } catch (error) {
+                console.error('❌ Main heatmap error:', error);
             }
         }
 
-        if (Number.isFinite(resolutionLat) && Number.isFinite(resolutionLng)) {
-            setResolutionMarker(resolutionLat, resolutionLng);
+        // Initialize resolution maps for each issue
+        const resolutionMaps = document.querySelectorAll('.resolution-map');
+        console.log(`📍 Found ${resolutionMaps.length} resolution maps to initialize`);
+        
+        resolutionMaps.forEach((mapElement, index) => {
+            try {
+                const mapId = mapElement.id;
+                const issueId = mapId.replace('resolution_map_', '');
+                console.log(`📍 [${index + 1}] Initializing map: ${mapId}`);
+
+                // Get coordinate data from map element
+                const issueLat = parseFloat(mapElement.dataset.issueLat);
+                const issueLng = parseFloat(mapElement.dataset.issueLng);
+                const resolutionLat = parseFloat(mapElement.dataset.resolutionLat);
+                const resolutionLng = parseFloat(mapElement.dataset.resolutionLng);
+
+                // Get input field references
+                const latInputId = mapElement.dataset.latInput;
+                const lngInputId = mapElement.dataset.lngInput;
+                const latInput = document.getElementById(latInputId);
+                const lngInput = document.getElementById(lngInputId);
+
+                console.log(`   - Issue coords: ${issueLat}, ${issueLng}`);
+                console.log(`   - Input IDs: ${latInputId}, ${lngInputId}`);
+                console.log(`   - Inputs found: ${!!latInput}, ${!!lngInput}`);
+
+                // Get display elements
+                const latDisplayId = `resolution_latitude_display_${issueId}`;
+                const lngDisplayId = `resolution_longitude_display_${issueId}`;
+                const latDisplay = document.getElementById(latDisplayId);
+                const lngDisplay = document.getElementById(lngDisplayId);
+
+                console.log(`   - Display IDs: ${latDisplayId}, ${lngDisplayId}`);
+                console.log(`   - Displays found: ${!!latDisplay}, ${!!lngDisplay}`);
+
+                if (!latInput || !lngInput) {
+                    console.error(`   ❌ Missing input elements for ${issueId}`);
+                    return;
+                }
+
+                // Initialize map
+                const initialLat = Number.isFinite(issueLat) ? issueLat : 20.5937;
+                const initialLng = Number.isFinite(issueLng) ? issueLng : 78.9629;
+                const zoomLevel = Number.isFinite(issueLat) ? 16 : 5;
+                
+                const map = L.map(mapId).setView([initialLat, initialLng], zoomLevel);
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '&copy; OpenStreetMap contributors'
+                }).addTo(map);
+
+                let resolutionMarker = null;
+
+                // Show original issue location
+                if (Number.isFinite(issueLat) && Number.isFinite(issueLng)) {
+                    L.marker([issueLat, issueLng], {
+                        title: 'Original issue location'
+                    }).addTo(map).bindPopup('<strong>📍 Original Issue Location</strong>').openPopup();
+                    
+                    // Draw 300m radius
+                    L.circle([issueLat, issueLng], {
+                        radius: 300,
+                        color: '#ef4444',
+                        fillColor: '#fee2e2',
+                        fillOpacity: 0.2,
+                        weight: 2,
+                        dashArray: '5, 5'
+                    }).addTo(map);
+                    
+                    console.log(`   - Original location marked at ${issueLat}, ${issueLng}`);
+                }
+
+                // Function to update coordinates
+                function updateCoordinates(lat, lng) {
+                    console.log(`   ✓ Updating coordinates: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+                    
+                    // Update hidden input fields
+                    latInput.value = lat.toFixed(6);
+                    lngInput.value = lng.toFixed(6);
+                    
+                    // Update display
+                    if (latDisplay) latDisplay.textContent = lat.toFixed(6);
+                    if (lngDisplay) lngDisplay.textContent = lng.toFixed(6);
+                    
+                    // Create or update marker
+                    if (!resolutionMarker) {
+                        resolutionMarker = L.marker([lat, lng], {
+                            draggable: true,
+                            title: 'Resolution location (drag to move)'
+                        }).addTo(map).bindPopup('<strong>✓ Resolution Proof Location</strong>').openPopup();
+                        
+                        resolutionMarker.on('dragend', (event) => {
+                            const newPos = event.target.getLatLng();
+                            console.log(`   - Marker dragged to: ${newPos.lat}, ${newPos.lng}`);
+                            updateCoordinates(newPos.lat, newPos.lng);
+                        });
+                        
+                        console.log(`   - Created new marker at ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+                    } else {
+                        resolutionMarker.setLatLng([lat, lng]);
+                        console.log(`   - Moved marker to ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+                    }
+                }
+
+                // Load existing resolution marker if available
+                if (Number.isFinite(resolutionLat) && Number.isFinite(resolutionLng)) {
+                    console.log(`   - Loading existing resolution: ${resolutionLat}, ${resolutionLng}`);
+                    updateCoordinates(resolutionLat, resolutionLng);
+                }
+
+                // Handle map clicks
+                map.on('click', (event) => {
+                    console.log(`   📍 Map clicked at: ${event.latlng.lat.toFixed(6)}, ${event.latlng.lng.toFixed(6)}`);
+                    
+                    // Check 300m boundary
+                    if (Number.isFinite(issueLat) && Number.isFinite(issueLng)) {
+                        const distance = event.latlng.distanceTo([issueLat, issueLng]);
+                        console.log(`   - Distance from original: ${distance.toFixed(0)}m`);
+                        
+                        if (distance > 300) {
+                            alert(`⚠️ Too far! Resolution proof must be within 300 meters.\n\nYou clicked ${Math.round(distance)}m away.`);
+                            console.log(`   ❌ Click rejected: too far`);
+                            return;
+                        }
+                    }
+                    
+                    updateCoordinates(event.latlng.lat, event.latlng.lng);
+                });
+
+                console.log(`✓ Resolution map ${issueId} ready!`);
+                
+            } catch (error) {
+                console.error(`❌ Map initialization error:`, error);
+                mapElement.innerHTML = '<div style="padding:2rem; color: #d32f2f; text-align: center; background: #ffebee; border-radius: 8px;">⚠️ Map failed to load. Please refresh the page.</div>';
+            }
+        });
+
+        console.log('🗺️ Map initialization complete!');
+
+        // Attach geolocation check for resolution video uploads
+        function computeDistanceMeters(lat1, lon1, lat2, lon2) {
+            const toRad = (v) => v * Math.PI / 180;
+            const R = 6371000; // metres
+            const dLat = toRad(lat2 - lat1);
+            const dLon = toRad(lon2 - lon1);
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
         }
 
-        map.on('click', (event) => {
-            setResolutionMarker(event.latlng.lat, event.latlng.lng);
-        });
-    });
+        function protectUploadForm(form) {
+            const videoInput = form.querySelector('input[name="resolution_video"]');
+            if (!videoInput) return;
+
+            form.addEventListener('submit', function (e) {
+                // If no video is being uploaded, allow submit
+                if (!videoInput.files || videoInput.files.length === 0) return;
+
+                // Prevent immediate submit while we get geolocation
+                e.preventDefault();
+
+                const mapEl = form.querySelector('.resolution-map');
+                if (!mapEl) {
+                    alert('Map element not found for this issue. Cannot validate upload location.');
+                    return;
+                }
+
+                const issueLat = parseFloat(mapEl.dataset.issueLat);
+                const issueLng = parseFloat(mapEl.dataset.issueLng);
+
+                if (!Number.isFinite(issueLat) || !Number.isFinite(issueLng)) {
+                    alert('Original issue location is not available. Cannot validate upload location.');
+                    return;
+                }
+
+                if (!navigator.geolocation) {
+                    alert('Geolocation is not available in this browser. Please use a device with location services enabled.');
+                    return;
+                }
+
+                const submitWithCoords = (lat, lng) => {
+                    // Fill hidden resolution inputs inside this form
+                    const latInput = form.querySelector('input[name="resolution_latitude"]');
+                    const lngInput = form.querySelector('input[name="resolution_longitude"]');
+                    if (latInput && lngInput) {
+                        latInput.value = lat.toFixed(6);
+                        lngInput.value = lng.toFixed(6);
+                    }
+
+                    // Update display boxes if present
+                    const issueId = mapEl.id.replace('resolution_map_', '');
+                    const latDisplay = document.getElementById(`resolution_latitude_display_${issueId}`);
+                    const lngDisplay = document.getElementById(`resolution_longitude_display_${issueId}`);
+                    if (latDisplay) latDisplay.textContent = lat.toFixed(6);
+                    if (lngDisplay) lngDisplay.textContent = lng.toFixed(6);
+
+                    // Now submit the form
+                    form.submit();
+                };
+
+                navigator.geolocation.getCurrentPosition(function (position) {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    const distance = computeDistanceMeters(lat, lng, issueLat, issueLng);
+                    console.log('Upload device location:', lat, lng, 'distance_m=', Math.round(distance));
+                    if (distance > 300) {
+                        alert(`Upload blocked: your current device location is ${Math.round(distance)}m from the reported issue. Upload must be within 300m.`);
+                        return;
+                    }
+                    submitWithCoords(lat, lng);
+                }, function (err) {
+                    console.error('Geolocation error', err);
+                    alert('Unable to obtain your device location. Ensure location services are enabled and permission granted.');
+                }, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+            });
+        }
+
+        // Protect all admin update forms on the page
+        document.querySelectorAll('form[action="/issue/update"]').forEach(protectUploadForm);
+    }
+
+    // Start initialization
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initMaps);
+    } else {
+        // DOM already loaded
+        initMaps();
+    }
 </script>
 {% endblock %}

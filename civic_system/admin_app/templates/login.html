@@ -1,42 +1,43 @@
-{% extends "base.html" %}
-{% block body_class %}auth-page{% endblock %}
+e {% extends "base.html" %}
 {% block content %}
 
 <h1>Admin Login</h1>
-<p class="muted">Authorized personnel can sign in with email OTP.</p>
+<p class="muted">Authorized personnel only.</p>
 
-<section class="auth-shell">
-    {% if message %}
-    <p class="success">{{ message }}</p>
-    {% endif %}
-
-    {% if error %}
-    <p class="error">{{ error }}</p>
-    {% endif %}
-
-    <form
-        class="form-card auth-card"
-        action="{% if otp_requested %}/login/verify-otp{% else %}/login/request-otp{% endif %}"
-        method="post"
-    >
+<section class="auth-grid">
+    <form class="form-card" action="/login/request-otp" method="post">
         <label>
             Admin Email
-            <input type="email" name="email" required value="{{ email or '' }}" autocomplete="email">
+            <input type="email" name="email" required value="{{ email or '' }}">
+        </label>
+        <div class="form-actions">
+            <button class="btn-submit">Send OTP</button>
+        </div>
+    </form>
+
+    <form class="form-card" action="/login/verify-otp" method="post">
+        <label>
+            Email
+            <input type="email" name="email" required value="{{ email or '' }}">
         </label>
 
-        {% if otp_requested %}
         <label>
             Enter OTP
-            <input type="text" name="otp" maxlength="6" inputmode="numeric" required autofocus>
+            <input type="text" name="otp" maxlength="6" required>
         </label>
-        {% endif %}
 
-        <div class="form-actions auth-actions">
-            <button class="btn-submit">
-                {% if otp_requested %}Verify OTP{% else %}Send OTP{% endif %}
-            </button>
+        <div class="form-actions">
+            <button class="btn-submit">Verify OTP</button>
         </div>
     </form>
 </section>
+
+{% if message %}
+<p class="success">{{ message }}</p>
+{% endif %}
+
+{% if error %}
+<p class="error">{{ error }}</p>
+{% endif %}
 
 {% endblock %}

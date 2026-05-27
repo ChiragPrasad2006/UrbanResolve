@@ -118,10 +118,15 @@ def build_ward_leaderboard(issues):
 def build_heatmap_data(issues, comment_counts):
     heatmap_points = []
     for issue in issues:
+        # Only include open/pending issues for heatmap visualization
+        if issue.status == "Resolved":
+            continue
         if issue.latitude is None or issue.longitude is None:
             continue
 
         weight = compute_issue_severity(issue, comment_counts.get(issue.id, 0), [])
+        # Scale weight for better heatmap intensity (0-100 range)
+        heatmap_intensity = min(weight * 8, 100)
         heatmap_points.append(
             {
                 "id": issue.id,
@@ -130,6 +135,7 @@ def build_heatmap_data(issues, comment_counts):
                 "lat": issue.latitude,
                 "lng": issue.longitude,
                 "weight": weight,
+                "intensity": heatmap_intensity,
                 "status": issue.status,
             }
         )
