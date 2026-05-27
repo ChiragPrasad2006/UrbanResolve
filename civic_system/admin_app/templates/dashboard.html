@@ -12,7 +12,13 @@
 <p class="error">{{ error }}</p>
 {% endif %}
 
-<section class="info-box">
+<div class="tab-row" style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem;"> 
+    <a class="btn-secondary" href="#open-issues">Open issues</a>
+    <a class="btn-secondary" href="#resolved-issues">Resolved issues</a>
+    <a class="btn-secondary" href="#analytics">Analytics</a>
+</div>
+
+<section class="info-box" id="analytics">
     <h3>Civic Heatmap Analytics</h3>
     <p class="muted compact">Recurring pothole, garbage, drainage, and other complaints are visualized below for admin-only planning.</p>
     <div id="adminHeatmap" class="map-box"></div>
@@ -37,6 +43,8 @@
 {% endif %}
 
 {% if issues %}
+<section id="open-issues">
+    <h2>Open issues</h2>
     {% for issue in issues %}
         <div class="issue-card">
             <div class="issue-header">
@@ -157,8 +165,8 @@
                     <label>
                         <strong>On-site Resolution Location</strong>
                         <p class="muted compact" style="margin: 0.5rem 0 0.75rem;">
-                            📍 Click on the map below to mark where you're uploading proof from. 
-                            The marker must be within 300 meters of the original issue location (shown in red).
+                            📍 Your current device location is shown on the map below. 
+                            Upload evidence only when your device is within 300 meters of the issue location.
                         </p>
                     </label>
                     <div
@@ -191,8 +199,55 @@
             </form>
         </div>
     {% endfor %}
+</section>
 {% else %}
     <p>No issues available.</p>
+{% endif %}
+
+{% if resolved_issues %}
+<section id="resolved-issues">
+    <h2>Resolved issues</h2>
+    <p class="muted compact">Issues marked as Resolved are listed here for review and verification history.</p>
+    {% for issue in resolved_issues %}
+        <div class="issue-card">
+            <div class="issue-header">
+                <div>
+                    <h2>{{ issue.title }}</h2>
+                    <p class="muted compact">
+                        {{ issue.category }} | Reported by {{ issue.reporter_email }} | Ward {{ issue.ward or "Unassigned" }}
+                    </p>
+                </div>
+                <span class="status-chip status-{{ issue.status|lower|replace(' ', '-') }}">{{ issue.status }}</span>
+            </div>
+
+            <div class="meta-strip">
+                <span>Severity {{ issue_severity.get(issue.id, 0) }}</span>
+                <span>Resolved at: {{ issue.resolved_at.strftime('%Y-%m-%d') if issue.resolved_at else 'Unknown' }}</span>
+                {% set hotspot = issue_hotspots.get(issue.id) %}
+                {% if hotspot and hotspot.count > 1 %}
+                <span class="badge-info">{{ hotspot.count }}-issue hotspot</span>
+                {% endif %}
+            </div>
+
+            {% if issue.admin_resolution_notes %}
+            <div class="info-box success-box">
+                <strong>Resolution notes:</strong>
+                <p>{{ issue.admin_resolution_notes }}</p>
+            </div>
+            {% endif %}
+
+            {% if issue.admin_resolution_video_path %}
+            <div class="resolution-proof">
+                <p><strong>Resolution proof</strong></p>
+                <video class="issue-media" controls>
+                    <source src="{{ issue.admin_resolution_video_path }}">
+                    Your browser does not support video playback.
+                </video>
+            </div>
+            {% endif %}
+        </div>
+    {% endfor %}
+</section>
 {% endif %}
 
 {% endblock %}
@@ -258,6 +313,30 @@
         const resolutionMaps = document.querySelectorAll('.resolution-map');
         console.log(`📍 Found ${resolutionMaps.length} resolution maps to initialize`);
         
+        let adminLocation = null;
+        const adminLocationPromise = new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
+                reject(new Error('Geolocation is not available in this browser.'));
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    resolve({
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude,
+                    });
+                },
+                (error) => reject(error),
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+            );
+        }).then((location) => {
+            adminLocation = location;
+            return location;
+        }).catch((error) => {
+            console.warn('Admin location unavailable:', error);
+            return null;
+        });
+
         resolutionMaps.forEach((mapElement, index) => {
             try {
                 const mapId = mapElement.id;
@@ -306,7 +385,7 @@
                     attribution: '&copy; OpenStreetMap contributors'
                 }).addTo(map);
 
-                let resolutionMarker = null;
+                let adminMarker = null;
 
                 // Show original issue location
                 if (Number.isFinite(issueLat) && Number.isFinite(issueLng)) {
@@ -327,61 +406,33 @@
                     console.log(`   - Original location marked at ${issueLat}, ${issueLng}`);
                 }
 
-                // Function to update coordinates
-                function updateCoordinates(lat, lng) {
-                    console.log(`   ✓ Updating coordinates: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-                    
-                    // Update hidden input fields
-                    latInput.value = lat.toFixed(6);
-                    lngInput.value = lng.toFixed(6);
-                    
-                    // Update display
+                function setAdminLocation(lat, lng) {
+                    console.log(`   ✓ Setting admin location: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+
+                    if (latInput && lngInput) {
+                        latInput.value = lat.toFixed(6);
+                        lngInput.value = lng.toFixed(6);
+                    }
                     if (latDisplay) latDisplay.textContent = lat.toFixed(6);
                     if (lngDisplay) lngDisplay.textContent = lng.toFixed(6);
-                    
-                    // Create or update marker
-                    if (!resolutionMarker) {
-                        resolutionMarker = L.marker([lat, lng], {
-                            draggable: true,
-                            title: 'Resolution location (drag to move)'
-                        }).addTo(map).bindPopup('<strong>✓ Resolution Proof Location</strong>').openPopup();
-                        
-                        resolutionMarker.on('dragend', (event) => {
-                            const newPos = event.target.getLatLng();
-                            console.log(`   - Marker dragged to: ${newPos.lat}, ${newPos.lng}`);
-                            updateCoordinates(newPos.lat, newPos.lng);
-                        });
-                        
-                        console.log(`   - Created new marker at ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+
+                    if (!adminMarker) {
+                        adminMarker = L.marker([lat, lng], {
+                            title: 'Your current location'
+                        }).addTo(map).bindPopup('<strong>👤 Your current location</strong>').openPopup();
                     } else {
-                        resolutionMarker.setLatLng([lat, lng]);
-                        console.log(`   - Moved marker to ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+                        adminMarker.setLatLng([lat, lng]);
                     }
-                }
 
-                // Load existing resolution marker if available
-                if (Number.isFinite(resolutionLat) && Number.isFinite(resolutionLng)) {
-                    console.log(`   - Loading existing resolution: ${resolutionLat}, ${resolutionLng}`);
-                    updateCoordinates(resolutionLat, resolutionLng);
-                }
-
-                // Handle map clicks
-                map.on('click', (event) => {
-                    console.log(`   📍 Map clicked at: ${event.latlng.lat.toFixed(6)}, ${event.latlng.lng.toFixed(6)}`);
-                    
-                    // Check 300m boundary
                     if (Number.isFinite(issueLat) && Number.isFinite(issueLng)) {
-                        const distance = event.latlng.distanceTo([issueLat, issueLng]);
-                        console.log(`   - Distance from original: ${distance.toFixed(0)}m`);
-                        
-                        if (distance > 300) {
-                            alert(`⚠️ Too far! Resolution proof must be within 300 meters.\n\nYou clicked ${Math.round(distance)}m away.`);
-                            console.log(`   ❌ Click rejected: too far`);
-                            return;
-                        }
+                        const distance = L.latLng(lat, lng).distanceTo(L.latLng(issueLat, issueLng));
+                        console.log(`   - Admin distance to issue: ${Math.round(distance)}m`);
                     }
-                    
-                    updateCoordinates(event.latlng.lat, event.latlng.lng);
+                }
+
+                adminLocationPromise.then((location) => {
+                    if (!location) return;
+                    setAdminLocation(location.lat, location.lng);
                 });
 
                 console.log(`✓ Resolution map ${issueId} ready!`);
@@ -427,6 +478,17 @@
 
                 if (!Number.isFinite(issueLat) || !Number.isFinite(issueLng)) {
                     alert('Original issue location is not available. Cannot validate upload location.');
+                    return;
+                }
+
+                if (adminLocation) {
+                    const distance = computeDistanceMeters(adminLocation.lat, adminLocation.lng, issueLat, issueLng);
+                    console.log('Using cached admin location:', adminLocation.lat, adminLocation.lng, 'distance_m=', Math.round(distance));
+                    if (distance > 300) {
+                        alert(`Upload blocked: your current device location is ${Math.round(distance)}m from the reported issue. Upload must be within 300m.`);
+                        return;
+                    }
+                    submitWithCoords(adminLocation.lat, adminLocation.lng);
                     return;
                 }
 

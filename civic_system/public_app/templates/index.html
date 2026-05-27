@@ -4,6 +4,20 @@
 <h1>Public Issues</h1>
 <p class="muted">Track civic problems, support reports from your area, see ward performance, and help verify real fixes.</p>
 
+{% if resolved_issues %}
+<div class="info-box" style="margin-bottom:1.25rem;">
+    <div class="leader-row" style="align-items:center; gap:1rem;">
+        <div>
+            <strong>Resolved issues</strong>
+            <p class="muted compact">Community verified fixes and resolution confirmations.</p>
+        </div>
+        <div class="leader-score">
+            <a class="btn-secondary" href="#resolved-issues">View resolved issues</a>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {% if success %}
 <p class="success">{{ success }}</p>
 {% endif %}
@@ -61,6 +75,7 @@
 </section>
 
 {% if issues %}
+    <h2>Open Issues</h2>
     {% for issue in issues %}
         <div class="issue-card">
             <div class="issue-header">
@@ -94,30 +109,26 @@
             {% endif %}
 
             {% if issue.reporter_video_path %}
-            <video class="issue-media" controls>
-                <source src="{{ issue.reporter_video_path }}">
-                Your browser does not support video playback.
-            </video>
+                <video class="issue-media" controls>
+                    <source src="{{ issue.reporter_video_path }}">
+                    Your browser does not support video playback.
+                </video>
             {% endif %}
 
             {% if issue.address %}
                 <p><strong>Address:</strong> {{ issue.address }}</p>
             {% endif %}
 
-            {% if issue.location_label %}
-                <p><strong>Map Pin:</strong> {{ issue.location_label }}</p>
-            {% endif %}
-
-            {% if issue.description %}
-                <p>{{ issue.description }}</p>
-            {% endif %}
-
-            {% if issue.last_update_message %}
-                <div class="info-box">
-                    <strong>Latest admin update:</strong>
-                    <p>{{ issue.last_update_message }}</p>
-                </div>
-            {% endif %}
+            <div class="meta-strip" style="margin-top:0.5rem; padding:0.85rem 0; border-top:1px solid #edf2ee; border-bottom:1px solid #edf2ee;">
+                <span><strong>{{ issue_upvotes.get(issue.id, 0) }}</strong> upvotes</span>
+                <span>
+                    <form action="/issue/{{ issue.id }}/upvote" method="post" style="display:inline-block; margin:0;">
+                        <button class="btn-secondary" type="submit" {% if issue.id in user_upvotes %}disabled{% endif %}>
+                            {% if issue.id in user_upvotes %}Upvoted{% else %}Upvote{% endif %}
+                        </button>
+                    </form>
+                </span>
+            </div>
 
             {% if issue.admin_resolution_notes %}
                 <div class="info-box success-box">
@@ -150,17 +161,9 @@
                     <p class="muted compact">No comments yet. Be the first to confirm this issue affects your area too.</p>
                 {% endif %}
 
+                {% if current_user %}
                 <form class="form-card compact-form" action="/issue/{{ issue.id }}/comments" method="post">
-                    <label>
-                        Name
-                        <input type="text" name="commenter_name" required>
-                    </label>
-
-                    <label>
-                        Email
-                        <input type="email" name="commenter_email" required>
-                    </label>
-
+                    <p class="muted compact">Commenting as <strong>{{ current_user }}</strong>.</p>
                     <label>
                         Comment
                         <textarea name="body" rows="3" placeholder="Describe how this issue affects you too." required></textarea>
@@ -170,74 +173,117 @@
                         <button class="btn-submit">Add Comment</button>
                     </div>
                 </form>
-            </div>
-
-            {% if issue.status == "Resolved" %}
-            <div class="comment-section">
-                <h3>Trusted Resolution Verification</h3>
-                {% set summary = verification_summary.get(issue.id, {"solved": 0, "not_solved": 0}) %}
-                <div class="meta-strip">
-                    <span>Solved confirmations: {{ summary.solved }}</span>
-                    <span>Not solved reports: {{ summary.not_solved }}</span>
+                {% else %}
+                <div class="form-card compact-form" style="padding:1rem; text-align:center;">
+                    <p class="muted">You must be logged in to comment or upvote.</p>
+                    <a class="btn-secondary" href="/login">Log in to join the conversation</a>
                 </div>
-
-                {% set verifications = issue_verifications.get(issue.id, []) %}
-                {% if verifications %}
-                    {% for verification in verifications %}
-                    <div class="comment-card">
-                        <p>
-                            <strong>{{ verification.verifier_name }}</strong>
-                            <span class="muted inline">{{ verification.verdict.replace('_', ' ') }}</span>
-                        </p>
-                        {% if verification.note %}
-                        <p>{{ verification.note }}</p>
-                        {% endif %}
-                        {% if verification.image_path %}
-                        <img src="{{ verification.image_path }}" class="issue-img" alt="Verification image">
-                        {% endif %}
-                    </div>
-                    {% endfor %}
                 {% endif %}
-
-                <form class="form-card compact-form" action="/issue/{{ issue.id }}/verify-resolution" method="post" enctype="multipart/form-data">
-                    <label>
-                        Name
-                        <input type="text" name="verifier_name" required>
-                    </label>
-
-                    <label>
-                        Email
-                        <input type="email" name="verifier_email" required>
-                    </label>
-
-                    <label>
-                        Verification
-                        <select name="verdict" required>
-                            <option value="solved">Yes, solved</option>
-                            <option value="not_solved">No, still unresolved</option>
-                        </select>
-                    </label>
-
-                    <label>
-                        Evidence note
-                        <textarea name="note" rows="3" placeholder="Share what you observed on-site."></textarea>
-                    </label>
-
-                    <label>
-                        Upload supporting image
-                        <input type="file" name="image" accept="image/*">
-                    </label>
-
-                    <div class="form-actions">
-                        <button class="btn-submit">Submit Verification</button>
-                    </div>
-                </form>
             </div>
-            {% endif %}
         </div>
     {% endfor %}
+{% elif resolved_issues %}
+    <p class="muted compact">No open issues at the moment. Check the resolved section below.</p>
 {% else %}
     <p>No public issues reported yet.</p>
 {% endif %}
+
+{% if resolved_issues %}
+<section id="resolved-issues">
+    <h2>Resolved Issues</h2>
+    <p class="muted compact">Resolved cases with community verification and final confirmation.</p>
+    {% for issue in resolved_issues %}
+        <div class="issue-card">
+            <div class="issue-header">
+                <div>
+                    <h2>{{ issue.title }}</h2>
+                    <p class="muted compact">
+                        {{ issue.category }} | {{ comment_counts.get(issue.id, 0) }} community comments | Severity {{ issue_severity.get(issue.id, 0) }}
+                    </p>
+                </div>
+                <span class="status-chip status-{{ issue.status|lower|replace(' ', '-') }}">{{ issue.status }}</span>
+            </div>
+
+            {% set hotspot = issue_hotspots.get(issue.id) %}
+            {% if hotspot and hotspot.count > 1 %}
+            <div class="info-box">
+                <strong>Duplicate hotspot detected</strong>
+                <p>{{ hotspot.count }} nearby similar complaints are clustered around this issue.</p>
+            </div>
+            {% endif %}
+
+            <div class="meta-strip">
+                <span>Ward: {{ issue.ward or "Unassigned" }}</span>
+                <span>Resolved at: {{ issue.resolved_at.strftime('%Y-%m-%d') if issue.resolved_at else 'Unknown' }}</span>
+            </div>
+
+            {% if issue.image_path %}
+            <img src="{{ issue.image_path }}" class="issue-img" alt="Issue image">
+            {% endif %}
+
+            {% if issue.admin_resolution_video_path %}
+            <div class="resolution-proof">
+                <p><strong>Resolution evidence</strong></p>
+                <video class="issue-media" controls>
+                    <source src="{{ issue.admin_resolution_video_path }}">
+                    Your browser does not support video playback.
+                </video>
+            </div>
+            {% endif %}
+
+            <div class="meta-strip" style="margin-top:0.5rem; padding:0.85rem 0; border-top:1px solid #edf2ee; border-bottom:1px solid #edf2ee;">
+                <span><strong>{{ issue_upvotes.get(issue.id, 0) }}</strong> upvotes</span>
+                <span>
+                    <form action="/issue/{{ issue.id }}/upvote" method="post" style="display:inline-block; margin:0;">
+                        <button class="btn-secondary" type="submit" {% if issue.id in user_upvotes %}disabled{% endif %}>
+                            {% if issue.id in user_upvotes %}Upvoted{% else %}Upvote{% endif %}
+                        </button>
+                    </form>
+                </span>
+            </div>
+
+            {% if issue.admin_resolution_notes %}
+                <div class="info-box success-box">
+                    <strong>Resolution notes:</strong>
+                    <p>{{ issue.admin_resolution_notes }}</p>
+                </div>
+            {% endif %}
+
+            <div class="comment-section">
+                <h3>Community comments</h3>
+                {% set comments = issue_comments.get(issue.id, []) %}
+                {% if comments %}
+                    {% for comment in comments %}
+                    <div class="comment-card">
+                        <p><strong>{{ comment.commenter_name }}</strong> <span class="muted inline">{{ comment.commenter_email }}</span></p>
+                        <p>{{ comment.body }}</p>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="muted compact">No comments yet. Be the first to confirm this issue was resolved.</p>
+                {% endif %}
+
+                {% if current_user %}
+                <form class="form-card compact-form" action="/issue/{{ issue.id }}/comments" method="post">
+                    <p class="muted compact">Commenting as <strong>{{ current_user }}</strong>.</p>
+                    <label>
+                        Comment
+                        <textarea name="body" rows="3" placeholder="Share what you observed after the fix." required></textarea>
+                    </label>
+
+                    <div class="form-actions">
+                        <button class="btn-submit">Add Comment</button>
+                    </div>
+                </form>
+                {% else %}
+                <div class="form-card compact-form" style="padding:1rem; text-align:center;">
+                    <p class="muted">You must be logged in to comment or upvote.</p>
+                    <a class="btn-secondary" href="/login">Log in to join the conversation</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    {% endfor %}
+</section>
 
 {% endblock %}

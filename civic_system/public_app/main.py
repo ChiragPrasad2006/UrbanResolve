@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
@@ -17,16 +18,17 @@ from shared.analytics import (
 from shared.database import get_db, init_database
 from shared.email_utils import send_email
 from shared.media_utils import save_upload
-from shared.models import Base, Comment, EmailOTP, Issue, ResolutionVerification, User
+from shared.models import Base, Comment, EmailOTP, Issue, IssueVote, ResolutionVerification, User
 from shared.security import generate_otp
 
 init_database(Base)
 
+BASE_DIR = Path(__file__).resolve().parent
 app = FastAPI(title="CivicConnect - Public Portal")
 
-app.mount("/static", StaticFiles(directory="public_app/static"), name="static")
-templates = Jinja2Templates(directory="public_app/templates")
-app.mount("/uploads", StaticFiles(directory="shared/uploads"), name="uploads")
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+app.mount("/uploads", StaticFiles(directory=str(BASE_DIR.parent / "shared" / "uploads")), name="uploads")
 
 
 def render_template(name: str, request: Request, context: dict):
@@ -45,9 +47,10 @@ def ensure_public_user(email: str, db: Session):
         db.commit()
 
 
-def build_issue_context(db: Session):
+def build_issue_context(db: Session, current_user: str | None = None):
     issues = db.query(Issue).filter(Issue.is_public == True).order_by(Issue.created_at.desc()).all()
     comments = db.query(Comment).order_by(Comment.created_at.asc()).all()
+    votes = db.query(IssueVote).all()
     verifications = db.query(ResolutionVerification).order_by(ResolutionVerification.created_at.desc()).all()
 
     issue_comments: dict[int, list[Comment]] = {}
@@ -80,8 +83,19 @@ def build_issue_context(db: Session):
         for hotspot_issue in hotspot["issues"]:
             issue_hotspots[hotspot_issue.id] = hotspot
 
+    issue_upvotes: dict[int, int] = {}
+    user_upvotes: set[int] = set()
+    for vote in votes:
+        issue_upvotes[vote.issue_id] = issue_upvotes.get(vote.issue_id, 0) + 1
+        if current_user and vote.voter_email == current_user:
+            user_upvotes.add(vote.issue_id)
+
+    resolved_issues = [issue for issue in issues if issue.status == "Resolved"]
+    active_issues = [issue for issue in issues if issue.status != "Resolved"]
+
     return {
-        "issues": issues,
+        "issues": active_issues,
+        "resolved_issues": resolved_issues,
         "issue_comments": issue_comments,
         "comment_counts": comment_counts,
         "issue_verifications": issue_verifications,
@@ -91,12 +105,14 @@ def build_issue_context(db: Session):
         "sla_status": sla_status,
         "issue_hotspots": issue_hotspots,
         "top_hotspots": hotspots[:5],
+        "issue_upvotes": issue_upvotes,
+        "user_upvotes": user_upvotes,
     }
 
 
 def render_issue_feed(request: Request, db: Session, **context):
-    merged_context = {}
-    merged_context.update(build_issue_context(db))
+    current_user = request.cookies.get("urbanresolve_user")
+    merged_context = build_issue_context(db, current_user=current_user)
     merged_context.update(context)
     return render_template("index.html", request, merged_context)
 
@@ -228,21 +244,46 @@ def submit_report(
 def add_comment(
     issue_id: int,
     request: Request,
-    commenter_name: str = Form(...),
-    commenter_email: str = Form(...),
     body: str = Form(...),
     db: Session = Depends(get_db)
 ):
+    current_user = request.cookies.get("urbanresolve_user")
+    if not current_user:
+        return render_issue_feed(request, db, error="Please log in before commenting.")
+
     issue = db.query(Issue).filter(Issue.id == issue_id, Issue.is_public == True).first()
     if not issue:
         return render_issue_feed(request, db, error="Issue not found.")
 
-    comment = Comment(issue_id=issue.id, commenter_name=commenter_name, commenter_email=commenter_email, body=body)
+    commenter_name = current_user.split("@")[0].replace('.', ' ').title()
+    comment = Comment(issue_id=issue.id, commenter_name=commenter_name, commenter_email=current_user, body=body)
     db.add(comment)
     db.commit()
-    ensure_public_user(commenter_email, db)
+    ensure_public_user(current_user, db)
 
     return render_issue_feed(request, db, success=f"Comment added for '{issue.title}'.")
+
+
+@app.post("/issue/{issue_id}/upvote")
+def upvote_issue(
+    request: Request,
+    issue_id: int,
+    db: Session = Depends(get_db)
+):
+    current_user = request.cookies.get("urbanresolve_user")
+    if not current_user:
+        return render_issue_feed(request, db, error="Please log in to upvote issues.")
+
+    issue = db.query(Issue).filter(Issue.id == issue_id, Issue.is_public == True).first()
+    if not issue:
+        return render_issue_feed(request, db, error="Issue not found")
+
+    existing_vote = db.query(IssueVote).filter(IssueVote.issue_id == issue_id, IssueVote.voter_email == current_user).first()
+    if not existing_vote:
+        db.add(IssueVote(issue_id=issue_id, voter_email=current_user))
+        db.commit()
+
+    return render_issue_feed(request, db, success=f"You upvoted '{issue.title}'.")
 
 
 @app.post("/issue/{issue_id}/verify-resolution")

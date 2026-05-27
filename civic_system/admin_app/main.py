@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.staticfiles import StaticFiles
@@ -22,11 +23,12 @@ from shared.security import generate_otp
 
 init_database(Base)
 
+BASE_DIR = Path(__file__).resolve().parent
 app = FastAPI(title="UrbanResolve Login - Admin Portal")
 
-app.mount("/static", StaticFiles(directory="admin_app/static"), name="static")
-templates = Jinja2Templates(directory="admin_app/templates")
-app.mount("/uploads", StaticFiles(directory="shared/uploads"), name="uploads")
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+app.mount("/uploads", StaticFiles(directory=str(BASE_DIR.parent / "shared" / "uploads")), name="uploads")
 
 
 def render_template(name: str, request: Request, context: dict):
@@ -98,8 +100,12 @@ def load_dashboard_context(request: Request, db: Session, **context):
         for hotspot_issue in hotspot["issues"]:
             issue_hotspots[hotspot_issue.id] = hotspot
 
+    active_issues = [issue for issue in issues if issue.status != "Resolved"]
+    resolved_issues = [issue for issue in issues if issue.status == "Resolved"]
+
     merged_context = {
-        "issues": issues,
+        "issues": active_issues,
+        "resolved_issues": resolved_issues,
         "issue_comments": issue_comments,
         "issue_verifications": issue_verifications,
         "verification_summary": verification_summary,

@@ -392,7 +392,7 @@ h3 {
 
 .grid-two {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(360px, 1.25fr) minmax(240px, 0.85fr);
     gap: 1rem;
     margin: 2.5rem 0 1.2rem;
 }
@@ -440,8 +440,12 @@ h3 {
 }
 
 .leader-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 1rem;
     padding: 0.85rem 0;
     border-bottom: 1px solid #edf2ee;
+    align-items: center;
 }
 
 .leader-row:last-child {

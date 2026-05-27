@@ -1,5 +1,5 @@
 # shared/models.py
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, Float, ForeignKey, UniqueConstraint
 from datetime import datetime
 from .database import Base
 
@@ -77,6 +77,21 @@ class ResolutionVerification(Base):
     verdict = Column(String, nullable=False)  # solved | not_solved
     note = Column(Text, nullable=True)
     image_path = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class IssueVote(Base):
+    """
+    Track one upvote per logged-in user for a public issue.
+    """
+    __tablename__ = "issue_votes"
+    __table_args__ = (
+        UniqueConstraint("issue_id", "voter_email", name="unique_issue_vote"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    issue_id = Column(Integer, ForeignKey("issues.id"), nullable=False, index=True)
+    voter_email = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
