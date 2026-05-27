@@ -31,6 +31,15 @@ body {
     line-height: 1.6;
 }
 
+body.auth-page {
+    min-height: 100vh;
+    background:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+        var(--ink);
+    background-size: 128px 128px, 128px 128px, auto;
+}
+
 .nav {
     min-height: 82px;
     display: flex;
