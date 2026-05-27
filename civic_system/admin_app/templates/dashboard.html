@@ -2,7 +2,7 @@
 {% block content %}
 
 <h1>UrbanResolve Admin Dashboard</h1>
-<p class="muted">Manage reported civic issues.</p>
+<p class="muted">Track severity, hotspot duplication, ward-level urgency, SLA breaches, and citizen verification signals.</p>
 
 {% if success %}
 <p class="success">{{ success }}</p>
@@ -12,43 +12,250 @@
 <p class="error">{{ error }}</p>
 {% endif %}
 
+<section class="info-box">
+    <h3>Civic Heatmap Analytics</h3>
+    <p class="muted compact">Recurring pothole, garbage, drainage, and other complaints are visualized below for admin-only planning.</p>
+    <div id="adminHeatmap" class="map-box"></div>
+</section>
+
+{% if hotspots %}
+<section class="info-box">
+    <h3>Duplicate Hotspots</h3>
+    {% for hotspot in hotspots %}
+    <div class="leader-row">
+        <div>
+            <strong>{{ hotspot.anchor_issue.title }}</strong>
+            <p class="muted compact">{{ hotspot.anchor_issue.category }} | {{ hotspot.anchor_issue.ward or hotspot.anchor_issue.address or "Unassigned" }}</p>
+        </div>
+        <div class="leader-score">
+            <strong>{{ hotspot.count }} issues</strong>
+            <p class="muted compact">{{ hotspot.comment_support }} comments</p>
+        </div>
+    </div>
+    {% endfor %}
+</section>
+{% endif %}
+
 {% if issues %}
     {% for issue in issues %}
         <div class="issue-card">
-            <h2>{{ issue.title }}</h2>
-            <p class="muted">{{ issue.category }}</p>
-            
+            <div class="issue-header">
+                <div>
+                    <h2>{{ issue.title }}</h2>
+                    <p class="muted compact">
+                        {{ issue.category }} | Reported by {{ issue.reporter_email }} | Ward {{ issue.ward or "Unassigned" }}
+                    </p>
+                </div>
+                <span class="status-chip status-{{ issue.status|lower|replace(' ', '-') }}">{{ issue.status }}</span>
+            </div>
+
+            <div class="meta-strip">
+                <span>Severity {{ issue_severity.get(issue.id, 0) }}</span>
+                <span>SLA {{ sla_status.get(issue.id).elapsed_hours }} / {{ sla_status.get(issue.id).allowed_hours }} hrs</span>
+                {% if sla_status.get(issue.id).overdue %}
+                <span class="badge-danger">Escalated overdue</span>
+                {% endif %}
+                {% set hotspot = issue_hotspots.get(issue.id) %}
+                {% if hotspot and hotspot.count > 1 %}
+                <span class="badge-info">{{ hotspot.count }}-issue hotspot</span>
+                {% endif %}
+            </div>
+
             {% if issue.image_path %}
-            <img src="{{ issue.image_path }}" class="issue-img">
+            <img src="{{ issue.image_path }}" class="issue-img" alt="Issue image">
+            {% endif %}
+
+            {% if issue.reporter_video_path %}
+            <video class="issue-media" controls>
+                <source src="{{ issue.reporter_video_path }}">
+                Your browser does not support video playback.
+            </video>
             {% endif %}
 
             {% if issue.address %}
-                <p>📍 {{ issue.address }}</p>
+                <p><strong>Address:</strong> {{ issue.address }}</p>
+            {% endif %}
+
+            {% if issue.location_label %}
+                <p><strong>Issue location:</strong> {{ issue.location_label }}</p>
             {% endif %}
 
             {% if issue.description %}
                 <p>{{ issue.description }}</p>
             {% endif %}
 
-            <p><strong>Status:</strong> {{ issue.status }}</p>
-            <p><strong>Reported by:</strong> {{ issue.reporter_email }}</p>
+            <div class="info-box">
+                <strong>Community support</strong>
+                {% set comments = issue_comments.get(issue.id, []) %}
+                <p>{{ comments|length }} users commented on this issue.</p>
+                {% if comments %}
+                    {% for comment in comments %}
+                    <div class="comment-card">
+                        <p><strong>{{ comment.commenter_name }}</strong> <span class="muted inline">{{ comment.commenter_email }}</span></p>
+                        <p>{{ comment.body }}</p>
+                    </div>
+                    {% endfor %}
+                {% endif %}
+            </div>
 
-            <form action="/issue/update" method="post">
-            <input type="hidden" name="issue_id" value="{{ issue.id }}">
+            {% set summary = verification_summary.get(issue.id, {"solved": 0, "not_solved": 0}) %}
+            <div class="info-box">
+                <strong>Trusted citizen verification</strong>
+                <p>Solved confirmations: {{ summary.solved }} | Not solved reports: {{ summary.not_solved }}</p>
+                {% set verifications = issue_verifications.get(issue.id, []) %}
+                {% if verifications %}
+                    {% for verification in verifications %}
+                    <div class="comment-card">
+                        <p><strong>{{ verification.verifier_name }}</strong> <span class="muted inline">{{ verification.verdict.replace('_', ' ') }}</span></p>
+                        {% if verification.note %}
+                        <p>{{ verification.note }}</p>
+                        {% endif %}
+                        {% if verification.image_path %}
+                        <img src="{{ verification.image_path }}" class="issue-img" alt="Citizen verification image">
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                {% endif %}
+            </div>
 
-            <select name="status" required>
-                <option value="Pending">Pending</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Resolved">Resolved</option>
-            </select>
+            {% if issue.admin_resolution_video_path %}
+            <div class="resolution-proof">
+                <p><strong>Existing resolution proof</strong></p>
+                <video class="issue-media" controls>
+                    <source src="{{ issue.admin_resolution_video_path }}">
+                    Your browser does not support video playback.
+                </video>
+            </div>
+            {% endif %}
 
-    <button class="btn-submit">Update Status</button>
-</form>
+            <form class="form-card compact-form" action="/issue/update" method="post" enctype="multipart/form-data">
+                <input type="hidden" name="issue_id" value="{{ issue.id }}">
 
+                <label>
+                    Status
+                    <select name="status" required>
+                        <option value="Pending" {% if issue.status == "Pending" %}selected{% endif %}>Pending</option>
+                        <option value="In Progress" {% if issue.status == "In Progress" %}selected{% endif %}>In Progress</option>
+                        <option value="Resolved" {% if issue.status == "Resolved" %}selected{% endif %}>Resolved</option>
+                    </select>
+                </label>
+
+                <label>
+                    Update message for citizens
+                    <textarea name="update_message" rows="3" placeholder="Share what action has been taken.">{{ issue.last_update_message or "" }}</textarea>
+                </label>
+
+                <label>
+                    Resolution notes
+                    <textarea name="resolution_notes" rows="3" placeholder="Mention crew details, action taken, or site evidence notes.">{{ issue.admin_resolution_notes or "" }}</textarea>
+                </label>
+
+                <input type="hidden" name="resolution_latitude" id="resolution_latitude_{{ issue.id }}">
+                <input type="hidden" name="resolution_longitude" id="resolution_longitude_{{ issue.id }}">
+
+                <div>
+                    <p class="muted compact">Resolution proof must be pinned near the original issue location. Uploading beyond 300 meters is blocked.</p>
+                    <div
+                        class="map-box resolution-map"
+                        id="resolution_map_{{ issue.id }}"
+                        data-issue-lat="{{ issue.latitude if issue.latitude is not none else '' }}"
+                        data-issue-lng="{{ issue.longitude if issue.longitude is not none else '' }}"
+                        data-resolution-lat="{{ issue.admin_resolution_latitude if issue.admin_resolution_latitude is not none else '' }}"
+                        data-resolution-lng="{{ issue.admin_resolution_longitude if issue.admin_resolution_longitude is not none else '' }}"
+                        data-lat-input="resolution_latitude_{{ issue.id }}"
+                        data-lng-input="resolution_longitude_{{ issue.id }}"
+                    ></div>
+                </div>
+
+                <label>
+                    Upload on-site resolution video
+                    <input type="file" name="resolution_video" accept="video/*">
+                </label>
+
+                <button class="btn-submit">Update Issue</button>
+            </form>
         </div>
     {% endfor %}
 {% else %}
     <p>No issues available.</p>
 {% endif %}
 
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const heatmapPoints = {{ heatmap_points|tojson }};
+    const heatmap = L.map('adminHeatmap').setView([20.5937, 78.9629], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(heatmap);
+
+    if (heatmapPoints.length) {
+        const bounds = [];
+        heatmapPoints.forEach((point) => {
+            bounds.push([point.lat, point.lng]);
+            const color = point.category === 'Pothole'
+                ? '#dc2626'
+                : point.category === 'Garbage'
+                ? '#d97706'
+                : point.category === 'Drainage'
+                ? '#2563eb'
+                : '#0f766e';
+            L.circle([point.lat, point.lng], {
+                radius: 80 + (point.weight * 18),
+                color,
+                fillColor: color,
+                fillOpacity: 0.28,
+            }).addTo(heatmap).bindPopup(`${point.title}<br>${point.category}<br>Severity ${point.weight}`);
+        });
+        heatmap.fitBounds(bounds, { padding: [25, 25] });
+    }
+
+    document.querySelectorAll('.resolution-map').forEach((mapElement) => {
+        const issueLat = parseFloat(mapElement.dataset.issueLat);
+        const issueLng = parseFloat(mapElement.dataset.issueLng);
+        const resolutionLat = parseFloat(mapElement.dataset.resolutionLat);
+        const resolutionLng = parseFloat(mapElement.dataset.resolutionLng);
+        const latInput = document.getElementById(mapElement.dataset.latInput);
+        const lngInput = document.getElementById(mapElement.dataset.lngInput);
+
+        const initialLat = Number.isFinite(issueLat) ? issueLat : 20.5937;
+        const initialLng = Number.isFinite(issueLng) ? issueLng : 78.9629;
+        const map = L.map(mapElement.id).setView([initialLat, initialLng], Number.isFinite(issueLat) ? 16 : 5);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        let resolutionMarker;
+        if (Number.isFinite(issueLat) && Number.isFinite(issueLng)) {
+            L.marker([issueLat, issueLng]).addTo(map).bindPopup('Original issue location').openPopup();
+        }
+
+        function setResolutionMarker(lat, lng) {
+            latInput.value = lat.toFixed(6);
+            lngInput.value = lng.toFixed(6);
+
+            if (!resolutionMarker) {
+                resolutionMarker = L.marker([lat, lng], { draggable: true }).addTo(map);
+                resolutionMarker.on('dragend', (event) => {
+                    const position = event.target.getLatLng();
+                    setResolutionMarker(position.lat, position.lng);
+                });
+            } else {
+                resolutionMarker.setLatLng([lat, lng]);
+            }
+        }
+
+        if (Number.isFinite(resolutionLat) && Number.isFinite(resolutionLng)) {
+            setResolutionMarker(resolutionLat, resolutionLng);
+        }
+
+        map.on('click', (event) => {
+            setResolutionMarker(event.latlng.lat, event.latlng.lng);
+        });
+    });
+</script>
 {% endblock %}

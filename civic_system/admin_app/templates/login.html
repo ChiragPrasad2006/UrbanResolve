@@ -2,36 +2,40 @@
 {% block content %}
 
 <h1>Admin Login</h1>
-<p class="muted">Authorized personnel only.</p>
+<p class="muted">Authorized personnel can sign in with email OTP.</p>
 
-<form class="form-card" action="/login/request-otp" method="post">
-    <label>
-        Admin Email
-        <input type="email" name="email" required value="{{ email or '' }}">
-    </label>
-    <button class="btn-submit">Send OTP</button>
-</form>
+<section class="auth-shell">
+    {% if message %}
+    <p class="success">{{ message }}</p>
+    {% endif %}
 
-<form class="form-card" action="/login/verify-otp" method="post" style="margin-top:1rem;">
-    <label>
-        Email
-        <input type="email" name="email" required value="{{ email or '' }}">
-    </label>
+    {% if error %}
+    <p class="error">{{ error }}</p>
+    {% endif %}
 
-    <label>
-        Enter OTP
-        <input type="text" name="otp" maxlength="6" required>
-    </label>
+    <form
+        class="form-card auth-card"
+        action="{% if otp_requested %}/login/verify-otp{% else %}/login/request-otp{% endif %}"
+        method="post"
+    >
+        <label>
+            Admin Email
+            <input type="email" name="email" required value="{{ email or '' }}" autocomplete="email">
+        </label>
 
-    <button class="btn-submit">Verify OTP</button>
-</form>
+        {% if otp_requested %}
+        <label>
+            Enter OTP
+            <input type="text" name="otp" maxlength="6" inputmode="numeric" required autofocus>
+        </label>
+        {% endif %}
 
-{% if message %}
-<p class="success">{{ message }}</p>
-{% endif %}
-
-{% if error %}
-<p class="error">{{ error }}</p>
-{% endif %}
+        <div class="form-actions auth-actions">
+            <button class="btn-submit">
+                {% if otp_requested %}Verify OTP{% else %}Send OTP{% endif %}
+            </button>
+        </div>
+    </form>
+</section>
 
 {% endblock %}

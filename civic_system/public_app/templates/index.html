@@ -2,31 +2,238 @@
 {% block content %}
 
 <h1>Public Issues</h1>
-<p class="muted">View civic issues reported by the community.</p>
+<p class="muted">Track civic problems, support reports from your area, see ward performance, and help verify real fixes.</p>
 
 {% if success %}
 <p class="success">{{ success }}</p>
 {% endif %}
 
+{% if error %}
+<p class="error">{{ error }}</p>
+{% endif %}
+
+<section class="grid-two">
+    <div class="info-box">
+        <h3>Ward Leaderboard</h3>
+        {% if ward_leaderboard %}
+            {% for ward in ward_leaderboard %}
+            <div class="leader-row">
+                <div>
+                    <strong>{{ ward.ward }}</strong>
+                    <p class="muted compact">{{ ward.resolved }} resolved | {{ ward.open }} open</p>
+                </div>
+                <div class="leader-score">
+                    <strong>{{ ward.score }}</strong>
+                    <p class="muted compact">
+                        {% if ward.avg_resolution_hours is not none %}
+                            Avg fix time {{ ward.avg_resolution_hours }} hrs
+                        {% else %}
+                            Waiting for resolved data
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <p class="muted compact">Leaderboard will appear once issues are submitted with ward details.</p>
+        {% endif %}
+    </div>
+
+    <div class="info-box">
+        <h3>Community Hotspots</h3>
+        {% if top_hotspots %}
+            {% for hotspot in top_hotspots %}
+            <div class="leader-row">
+                <div>
+                    <strong>{{ hotspot.anchor_issue.category }} hotspot</strong>
+                    <p class="muted compact">{{ hotspot.anchor_issue.ward or hotspot.anchor_issue.address or "Location pending" }}</p>
+                </div>
+                <div class="leader-score">
+                    <strong>{{ hotspot.count }} reports</strong>
+                    <p class="muted compact">{{ hotspot.comment_support }} supporting comments</p>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <p class="muted compact">Hotspots appear when similar nearby complaints are detected.</p>
+        {% endif %}
+    </div>
+</section>
+
 {% if issues %}
     {% for issue in issues %}
         <div class="issue-card">
-            <h2>{{ issue.title }}</h2>
-            <p class="muted">{{ issue.category }}</p>
+            <div class="issue-header">
+                <div>
+                    <h2>{{ issue.title }}</h2>
+                    <p class="muted compact">
+                        {{ issue.category }} | {{ comment_counts.get(issue.id, 0) }} community comments | Severity {{ issue_severity.get(issue.id, 0) }}
+                    </p>
+                </div>
+                <span class="status-chip status-{{ issue.status|lower|replace(' ', '-') }}">{{ issue.status }}</span>
+            </div>
+
+            {% set hotspot = issue_hotspots.get(issue.id) %}
+            {% if hotspot and hotspot.count > 1 %}
+            <div class="info-box">
+                <strong>Duplicate hotspot detected</strong>
+                <p>{{ hotspot.count }} nearby similar complaints are clustered around this issue.</p>
+            </div>
+            {% endif %}
+
+            <div class="meta-strip">
+                <span>Ward: {{ issue.ward or "Unassigned" }}</span>
+                <span>SLA: {{ sla_status.get(issue.id).elapsed_hours }} / {{ sla_status.get(issue.id).allowed_hours }} hrs</span>
+                {% if sla_status.get(issue.id).overdue %}
+                <span class="badge-danger">Overdue</span>
+                {% endif %}
+            </div>
 
             {% if issue.image_path %}
-            <img src="{{ issue.image_path }}" class="issue-img">
+            <img src="{{ issue.image_path }}" class="issue-img" alt="Issue image">
+            {% endif %}
+
+            {% if issue.reporter_video_path %}
+            <video class="issue-media" controls>
+                <source src="{{ issue.reporter_video_path }}">
+                Your browser does not support video playback.
+            </video>
             {% endif %}
 
             {% if issue.address %}
-                <p>📍 {{ issue.address }}</p>
+                <p><strong>Address:</strong> {{ issue.address }}</p>
+            {% endif %}
+
+            {% if issue.location_label %}
+                <p><strong>Map Pin:</strong> {{ issue.location_label }}</p>
             {% endif %}
 
             {% if issue.description %}
                 <p>{{ issue.description }}</p>
             {% endif %}
 
-            <p><strong>Status:</strong> {{ issue.status }}</p>
+            {% if issue.last_update_message %}
+                <div class="info-box">
+                    <strong>Latest admin update:</strong>
+                    <p>{{ issue.last_update_message }}</p>
+                </div>
+            {% endif %}
+
+            {% if issue.admin_resolution_notes %}
+                <div class="info-box success-box">
+                    <strong>Resolution notes:</strong>
+                    <p>{{ issue.admin_resolution_notes }}</p>
+                </div>
+            {% endif %}
+
+            {% if issue.admin_resolution_video_path %}
+            <div class="resolution-proof">
+                <p><strong>On-site resolution video</strong></p>
+                <video class="issue-media" controls>
+                    <source src="{{ issue.admin_resolution_video_path }}">
+                    Your browser does not support video playback.
+                </video>
+            </div>
+            {% endif %}
+
+            <div class="comment-section">
+                <h3>Community comments</h3>
+                {% set comments = issue_comments.get(issue.id, []) %}
+                {% if comments %}
+                    {% for comment in comments %}
+                    <div class="comment-card">
+                        <p><strong>{{ comment.commenter_name }}</strong> <span class="muted inline">{{ comment.commenter_email }}</span></p>
+                        <p>{{ comment.body }}</p>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="muted compact">No comments yet. Be the first to confirm this issue affects your area too.</p>
+                {% endif %}
+
+                <form class="form-card compact-form" action="/issue/{{ issue.id }}/comments" method="post">
+                    <label>
+                        Name
+                        <input type="text" name="commenter_name" required>
+                    </label>
+
+                    <label>
+                        Email
+                        <input type="email" name="commenter_email" required>
+                    </label>
+
+                    <label>
+                        Comment
+                        <textarea name="body" rows="3" placeholder="Describe how this issue affects you too." required></textarea>
+                    </label>
+
+                    <div class="form-actions">
+                        <button class="btn-submit">Add Comment</button>
+                    </div>
+                </form>
+            </div>
+
+            {% if issue.status == "Resolved" %}
+            <div class="comment-section">
+                <h3>Trusted Resolution Verification</h3>
+                {% set summary = verification_summary.get(issue.id, {"solved": 0, "not_solved": 0}) %}
+                <div class="meta-strip">
+                    <span>Solved confirmations: {{ summary.solved }}</span>
+                    <span>Not solved reports: {{ summary.not_solved }}</span>
+                </div>
+
+                {% set verifications = issue_verifications.get(issue.id, []) %}
+                {% if verifications %}
+                    {% for verification in verifications %}
+                    <div class="comment-card">
+                        <p>
+                            <strong>{{ verification.verifier_name }}</strong>
+                            <span class="muted inline">{{ verification.verdict.replace('_', ' ') }}</span>
+                        </p>
+                        {% if verification.note %}
+                        <p>{{ verification.note }}</p>
+                        {% endif %}
+                        {% if verification.image_path %}
+                        <img src="{{ verification.image_path }}" class="issue-img" alt="Verification image">
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                {% endif %}
+
+                <form class="form-card compact-form" action="/issue/{{ issue.id }}/verify-resolution" method="post" enctype="multipart/form-data">
+                    <label>
+                        Name
+                        <input type="text" name="verifier_name" required>
+                    </label>
+
+                    <label>
+                        Email
+                        <input type="email" name="verifier_email" required>
+                    </label>
+
+                    <label>
+                        Verification
+                        <select name="verdict" required>
+                            <option value="solved">Yes, solved</option>
+                            <option value="not_solved">No, still unresolved</option>
+                        </select>
+                    </label>
+
+                    <label>
+                        Evidence note
+                        <textarea name="note" rows="3" placeholder="Share what you observed on-site."></textarea>
+                    </label>
+
+                    <label>
+                        Upload supporting image
+                        <input type="file" name="image" accept="image/*">
+                    </label>
+
+                    <div class="form-actions">
+                        <button class="btn-submit">Submit Verification</button>
+                    </div>
+                </form>
+            </div>
+            {% endif %}
         </div>
     {% endfor %}
 {% else %}

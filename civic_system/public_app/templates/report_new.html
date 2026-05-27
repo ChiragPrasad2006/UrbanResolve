@@ -2,7 +2,7 @@
 {% block content %}
 
 <h1>Report an Issue</h1>
-<p class="muted">Report civic problems to help authorities take action.</p>
+<p class="muted">Pin the exact spot, upload proof, and help authorities verify faster.</p>
 
 <form class="form-card" action="/report/new" method="post" enctype="multipart/form-data">
     <label>
@@ -18,19 +18,46 @@
             <option value="Streetlight">Streetlight</option>
             <option value="Garbage">Garbage</option>
             <option value="Water">Water Leakage</option>
+            <option value="Drainage">Drainage</option>
             <option value="Other">Other</option>
         </select>
     </label>
 
     <label>
         Description
-        <textarea name="description"></textarea>
+        <textarea name="description" id="descriptionField" rows="4"></textarea>
     </label>
+
+    <div class="map-actions">
+        <button class="btn-secondary" type="button" id="startVoiceInput">Speak Description</button>
+        <span class="hint" id="voiceStatus">Use your microphone to convert speech into the description text.</span>
+    </div>
 
     <label>
         Address
-        <input type="text" name="address">
+        <input type="text" name="address" placeholder="Street, ward, landmark">
     </label>
+
+    <label>
+        Ward / Locality
+        <input type="text" name="ward" placeholder="Ward name or neighborhood">
+    </label>
+
+    <label>
+        Selected Map Location
+        <input type="text" name="location_label" id="locationLabel" placeholder="Use the map or current location" readonly>
+    </label>
+
+    <input type="hidden" name="latitude" id="latitude">
+    <input type="hidden" name="longitude" id="longitude">
+
+    <div>
+        <div class="map-actions">
+            <button class="btn-secondary" type="button" id="useCurrentLocation">Use Current Location</button>
+            <span class="hint">Click on the map to adjust the issue location.</span>
+        </div>
+        <div id="issueMap" class="map-box"></div>
+    </div>
 
     <label>
         Your Email
@@ -38,15 +65,105 @@
     </label>
 
     <label>
-    Upload Image
-    <input type="file" name="image" accept="image/*">
+        Upload Image
+        <input type="file" name="image" accept="image/*">
     </label>
 
-    <button class="btn-submit">Submit Issue</button>
+    <label>
+        Upload Video Evidence
+        <input type="file" name="video" accept="video/*">
+        <span class="hint">Video can include audio so authorities hear the problem too.</span>
+    </label>
+
+    <div class="form-actions">
+        <button class="btn-submit">Submit Issue</button>
+    </div>
 </form>
 
 {% if success %}
 <p class="success">{{ success }}</p>
 {% endif %}
 
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const map = L.map('issueMap').setView([20.5937, 78.9629], 5);
+    const labelInput = document.getElementById('locationLabel');
+    const latInput = document.getElementById('latitude');
+    const lngInput = document.getElementById('longitude');
+    const descriptionField = document.getElementById('descriptionField');
+    const voiceStatus = document.getElementById('voiceStatus');
+    let marker;
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    function updateLocation(lat, lng, label) {
+        latInput.value = lat.toFixed(6);
+        lngInput.value = lng.toFixed(6);
+        labelInput.value = label || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+
+        if (!marker) {
+            marker = L.marker([lat, lng]).addTo(map);
+        } else {
+            marker.setLatLng([lat, lng]);
+        }
+    }
+
+    map.on('click', (event) => {
+        updateLocation(event.latlng.lat, event.latlng.lng, `Pinned at ${event.latlng.lat.toFixed(5)}, ${event.latlng.lng.toFixed(5)}`);
+    });
+
+    document.getElementById('useCurrentLocation').addEventListener('click', () => {
+        if (!navigator.geolocation) {
+            labelInput.value = 'Geolocation is not supported on this browser.';
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition((position) => {
+            const { latitude, longitude } = position.coords;
+            map.setView([latitude, longitude], 16);
+            updateLocation(latitude, longitude, `Current location: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+        }, () => {
+            labelInput.value = 'Unable to fetch your current location. Please pin the map manually.';
+        });
+    });
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'en-IN';
+        recognition.continuous = false;
+        recognition.interimResults = false;
+
+        document.getElementById('startVoiceInput').addEventListener('click', () => {
+            voiceStatus.textContent = 'Listening... speak your issue description clearly.';
+            recognition.start();
+        });
+
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            descriptionField.value = descriptionField.value
+                ? `${descriptionField.value} ${transcript}`
+                : transcript;
+            voiceStatus.textContent = 'Speech captured and added to the description.';
+        };
+
+        recognition.onerror = () => {
+            voiceStatus.textContent = 'Voice capture failed. Please type the description manually.';
+        };
+
+        recognition.onend = () => {
+            if (voiceStatus.textContent === 'Listening... speak your issue description clearly.') {
+                voiceStatus.textContent = 'Listening stopped. You can try again or continue typing.';
+            }
+        };
+    } else {
+        document.getElementById('startVoiceInput').disabled = true;
+        voiceStatus.textContent = 'Voice input is not supported in this browser.';
+    }
+</script>
 {% endblock %}
