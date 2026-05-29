@@ -1,8 +1,10 @@
 # shared/database.py
+import pathlib as _pathlib
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-DATABASE_URL = "sqlite:///./civic.db"
+_DB_PATH = _pathlib.Path(__file__).resolve().parent.parent / "civic.db"
+DATABASE_URL = f"sqlite:///{_DB_PATH}"
 
 engine = create_engine(
     DATABASE_URL,

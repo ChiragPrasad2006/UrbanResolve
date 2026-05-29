@@ -4,19 +4,7 @@
 <h1>Public Issues</h1>
 <p class="muted">Track civic problems, support reports from your area, see ward performance, and help verify real fixes.</p>
 
-{% if resolved_issues %}
-<div class="info-box" style="margin-bottom:1.25rem;">
-    <div class="leader-row" style="align-items:center; gap:1rem;">
-        <div>
-            <strong>Resolved issues</strong>
-            <p class="muted compact">Community verified fixes and resolution confirmations.</p>
-        </div>
-        <div class="leader-score">
-            <a class="btn-secondary" href="#resolved-issues">View resolved issues</a>
-        </div>
-    </div>
-</div>
-{% endif %}
+
 
 {% if success %}
 <p class="success">{{ success }}</p>
@@ -74,9 +62,15 @@
     </div>
 </section>
 
-{% if issues %}
-    <h2>Open Issues</h2>
-    {% for issue in issues %}
+<div class="tabs-container">
+    <div class="tab-buttons">
+        <button class="tab-btn active" onclick="switchTab('open', event)">Open Issues</button>
+        <button class="tab-btn" onclick="switchTab('resolved', event)">Resolved Issues</button>
+    </div>
+
+    <div id="tab-open" class="tab-content active">
+        {% if issues %}
+            {% for issue in issues %}
         <div class="issue-card">
             <div class="issue-header">
                 <div>
@@ -182,17 +176,15 @@
             </div>
         </div>
     {% endfor %}
-{% elif resolved_issues %}
-    <p class="muted compact">No open issues at the moment. Check the resolved section below.</p>
-{% else %}
-    <p>No public issues reported yet.</p>
-{% endif %}
+        {% else %}
+            <p class="muted compact">No open issues at the moment.</p>
+        {% endif %}
+    </div>
 
-{% if resolved_issues %}
-<section id="resolved-issues">
-    <h2>Resolved Issues</h2>
-    <p class="muted compact">Resolved cases with community verification and final confirmation.</p>
-    {% for issue in resolved_issues %}
+    <div id="tab-resolved" class="tab-content">
+        {% if resolved_issues %}
+            <p class="muted compact" style="margin-bottom:1rem;">Resolved cases with community verification and final confirmation.</p>
+            {% for issue in resolved_issues %}
         <div class="issue-card">
             <div class="issue-header">
                 <div>
@@ -231,15 +223,9 @@
             </div>
             {% endif %}
 
+            {% set summary = verification_summary.get(issue.id, {'solved': 0, 'not_solved': 0}) %}
             <div class="meta-strip" style="margin-top:0.5rem; padding:0.85rem 0; border-top:1px solid #edf2ee; border-bottom:1px solid #edf2ee;">
-                <span><strong>{{ issue_upvotes.get(issue.id, 0) }}</strong> upvotes</span>
-                <span>
-                    <form action="/issue/{{ issue.id }}/upvote" method="post" style="display:inline-block; margin:0;">
-                        <button class="btn-secondary" type="submit" {% if issue.id in user_upvotes %}disabled{% endif %}>
-                            {% if issue.id in user_upvotes %}Upvoted{% else %}Upvote{% endif %}
-                        </button>
-                    </form>
-                </span>
+                <span><strong>{{ summary.get('solved', 0) }}</strong> Solved (Upvotes) &nbsp; | &nbsp; <strong>{{ summary.get('not_solved', 0) }}</strong> Not Solved (Downvotes)</span>
             </div>
 
             {% if issue.admin_resolution_notes %}
@@ -250,40 +236,78 @@
             {% endif %}
 
             <div class="comment-section">
-                <h3>Community comments</h3>
-                {% set comments = issue_comments.get(issue.id, []) %}
-                {% if comments %}
-                    {% for comment in comments %}
+                <h3>Community Verification Comments</h3>
+                {% set verifications = issue_verifications.get(issue.id, []) %}
+                {% if verifications %}
+                    {% for v in verifications %}
                     <div class="comment-card">
-                        <p><strong>{{ comment.commenter_name }}</strong> <span class="muted inline">{{ comment.commenter_email }}</span></p>
-                        <p>{{ comment.body }}</p>
+                        <p>
+                            <strong>{{ v.verifier_name }}</strong> <span class="muted inline">{{ v.verifier_email }}</span>
+                            {% if v.verdict == 'solved' %}
+                                <span class="status-chip status-resolved" style="margin-left:0.5rem;">Solved</span>
+                            {% else %}
+                                <span class="badge-danger" style="margin-left:0.5rem;">Not Solved</span>
+                            {% endif %}
+                        </p>
+                        {% if v.note %}
+                            <p>{{ v.note }}</p>
+                        {% endif %}
                     </div>
                     {% endfor %}
                 {% else %}
-                    <p class="muted compact">No comments yet. Be the first to confirm this issue was resolved.</p>
+                    <p class="muted compact">No verification comments yet. Be the first to confirm this issue was resolved.</p>
                 {% endif %}
 
                 {% if current_user %}
-                <form class="form-card compact-form" action="/issue/{{ issue.id }}/comments" method="post">
-                    <p class="muted compact">Commenting as <strong>{{ current_user }}</strong>.</p>
+                <form class="form-card compact-form" action="/issue/{{ issue.id }}/verify-resolution" method="post" enctype="multipart/form-data">
+                    <p class="muted compact">Verifying as <strong>{{ current_user }}</strong>.</p>
+                    <input type="hidden" name="verifier_email" value="{{ current_user }}">
                     <label>
-                        Comment
-                        <textarea name="body" rows="3" placeholder="Share what you observed after the fix." required></textarea>
+                        Your Name
+                        <input type="text" name="verifier_name" placeholder="Enter your name" required>
                     </label>
-
+                    <label>
+                        Is it resolved?
+                        <select name="verdict" required>
+                            <option value="solved">Yes, it is resolved (Upvote)</option>
+                            <option value="not_solved">No, it is not resolved (Downvote)</option>
+                        </select>
+                    </label>
+                    <label>
+                        Comment (Optional)
+                        <textarea name="note" rows="2" placeholder="Share what you observed after the fix."></textarea>
+                    </label>
+                    <label>
+                        Photo Evidence (Optional)
+                        <input type="file" name="image" accept="image/*">
+                    </label>
                     <div class="form-actions">
-                        <button class="btn-submit">Add Comment</button>
+                        <button class="btn-submit">Submit Verification</button>
                     </div>
                 </form>
                 {% else %}
                 <div class="form-card compact-form" style="padding:1rem; text-align:center;">
-                    <p class="muted">You must be logged in to comment or upvote.</p>
+                    <p class="muted">You must be logged in to verify resolution or comment.</p>
                     <a class="btn-secondary" href="/login">Log in to join the conversation</a>
                 </div>
                 {% endif %}
             </div>
         </div>
-    {% endfor %}
-</section>
+            {% endfor %}
+        {% else %}
+            <p class="muted compact">No resolved issues yet.</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function switchTab(tabId, event) {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    
+    event.currentTarget.classList.add('active');
+    document.getElementById('tab-' + tabId).classList.add('active');
+}
+</script>
 
 {% endblock %}

@@ -5,7 +5,7 @@ from pathlib import Path
 from uuid import uuid4
 
 
-UPLOAD_ROOT = Path("shared/uploads")
+UPLOAD_ROOT = Path(__file__).resolve().parent / "uploads"
 
 
 def save_upload(upload_file, folder: str = "") -> str | None:

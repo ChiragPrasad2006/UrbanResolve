@@ -67,7 +67,7 @@ body.auth-page::before {
     border-bottom: 1px solid rgba(229, 255, 241, 0.08);
     position: sticky;
     top: 0;
-    z-index: 100;
+    z-index: 9999;
 }
 
 .logo {
@@ -667,6 +667,49 @@ h3 {
     border-radius: 8px;
     background: #f8fbf8;
     margin-bottom: 0.75rem;
+}
+
+/* Tabs */
+.tabs-container {
+    margin-top: 2rem;
+}
+
+.tab-buttons {
+    display: flex;
+    gap: 0.5rem;
+    border-bottom: 2px solid var(--border);
+    margin-bottom: 1.5rem;
+}
+
+.tab-btn {
+    background: none;
+    border: none;
+    padding: 0.8rem 1.5rem;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    font-family: "Segoe UI", sans-serif;
+    transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+    color: var(--text);
+}
+
+.tab-btn.active {
+    color: var(--primary-dark);
+    border-bottom-color: var(--primary);
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
 }
 
 @media (max-width: 760px) {
