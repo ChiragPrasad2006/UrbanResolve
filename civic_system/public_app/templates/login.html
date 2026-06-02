@@ -19,6 +19,7 @@
         action="{% if otp_requested %}/login/verify-otp{% else %}/login/request-otp{% endif %}"
         method="post"
     >
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <label>
             Email
             <input type="email" name="email" required value="{{ email or '' }}" autocomplete="email">

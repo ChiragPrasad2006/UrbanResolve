@@ -5,6 +5,7 @@
 <p class="muted">Pin the exact spot, upload proof, and help authorities verify faster.</p>
 
 <form class="form-card" action="/report/new" method="post" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label>
         Title
         <input type="text" name="title" required>

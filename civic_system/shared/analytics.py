@@ -1,3 +1,10 @@
+# shared/analytics.py
+"""
+Analytics utilities for civic issue data.
+All functions operate on MongoDB document dicts (not SQLAlchemy objects).
+Access fields via doc["field"] or doc.get("field").
+"""
+
 from collections import defaultdict
 from datetime import datetime
 
@@ -23,75 +30,78 @@ SLA_HOURS = {
 }
 
 
-def group_duplicate_hotspots(issues, comment_counts: dict[int, int], radius_meters: int = 250):
-    open_issues = [issue for issue in issues if issue.status != "Resolved"]
+def group_duplicate_hotspots(issues: list[dict], comment_counts: dict[int, int], radius_meters: int = 250):
+    open_issues = [issue for issue in issues if issue["status"] != "Resolved"]
     visited = set()
     hotspots = []
 
     for issue in open_issues:
-        if issue.id in visited:
+        iid = issue["issue_id"]
+        if iid in visited:
             continue
 
         cluster = [issue]
-        visited.add(issue.id)
+        visited.add(iid)
         for candidate in open_issues:
-            if candidate.id in visited:
+            cid = candidate["issue_id"]
+            if cid in visited:
                 continue
-            if candidate.category != issue.category:
+            if candidate["category"] != issue["category"]:
                 continue
-            if None in (issue.latitude, issue.longitude, candidate.latitude, candidate.longitude):
+            if None in (issue.get("latitude"), issue.get("longitude"), candidate.get("latitude"), candidate.get("longitude")):
                 continue
 
-            distance = distance_in_meters(issue.latitude, issue.longitude, candidate.latitude, candidate.longitude)
+            distance = distance_in_meters(issue["latitude"], issue["longitude"], candidate["latitude"], candidate["longitude"])
             if distance <= radius_meters:
                 cluster.append(candidate)
-                visited.add(candidate.id)
+                visited.add(cid)
 
         hotspot = {
             "anchor_issue": issue,
             "issues": cluster,
             "count": len(cluster),
-            "comment_support": sum(comment_counts.get(item.id, 0) for item in cluster),
+            "comment_support": sum(comment_counts.get(item["issue_id"], 0) for item in cluster),
         }
         hotspots.append(hotspot)
 
     return sorted(hotspots, key=lambda item: (item["count"], item["comment_support"]), reverse=True)
 
 
-def compute_density_bonus(issue, hotspots):
+def compute_density_bonus(issue: dict, hotspots: list[dict]):
+    iid = issue["issue_id"]
     for hotspot in hotspots:
-        if any(member.id == issue.id for member in hotspot["issues"]):
+        if any(member["issue_id"] == iid for member in hotspot["issues"]):
             return max(hotspot["count"] - 1, 0) * 0.8
     return 0.0
 
 
-def compute_issue_severity(issue, comment_count: int, hotspots):
-    age_hours = max((datetime.utcnow() - issue.created_at).total_seconds() / 3600, 0)
-    category_weight = CATEGORY_WEIGHTS.get(issue.category, 3.0)
+def compute_issue_severity(issue: dict, comment_count: int, hotspots: list[dict]):
+    age_hours = max((datetime.utcnow() - issue["created_at"]).total_seconds() / 3600, 0)
+    category_weight = CATEGORY_WEIGHTS.get(issue["category"], 3.0)
     age_score = min(age_hours / 24, 5)
     support_score = min(comment_count * 0.7, 5)
     density_score = compute_density_bonus(issue, hotspots)
-    resolved_penalty = -2 if issue.status == "Resolved" else 0
+    resolved_penalty = -2 if issue["status"] == "Resolved" else 0
     raw_score = category_weight + age_score + support_score + density_score + resolved_penalty
     return round(max(raw_score, 0), 1)
 
 
-def build_issue_severity(issue, comment_count: int, hotspots):
+def build_issue_severity(issue: dict, comment_count: int, hotspots: list[dict]):
     return compute_issue_severity(issue, comment_count, hotspots)
 
 
-def build_ward_leaderboard(issues):
+def build_ward_leaderboard(issues: list[dict]):
     wards = defaultdict(lambda: {"ward": "Unassigned", "resolved": 0, "open": 0, "total_resolution_hours": 0.0})
 
     for issue in issues:
-        ward_name = issue.ward or "Unassigned"
+        ward_name = issue.get("ward") or "Unassigned"
         entry = wards[ward_name]
         entry["ward"] = ward_name
 
-        if issue.status == "Resolved":
+        if issue["status"] == "Resolved":
             entry["resolved"] += 1
-            if issue.resolved_at:
-                hours = max((issue.resolved_at - issue.created_at).total_seconds() / 3600, 0)
+            if issue.get("resolved_at"):
+                hours = max((issue["resolved_at"] - issue["created_at"]).total_seconds() / 3600, 0)
                 entry["total_resolution_hours"] += hours
         else:
             entry["open"] += 1
@@ -115,43 +125,43 @@ def build_ward_leaderboard(issues):
     return sorted(leaderboard, key=lambda item: item["score"], reverse=True)
 
 
-def build_heatmap_data(issues, comment_counts):
+def build_heatmap_data(issues: list[dict], comment_counts: dict[int, int]):
     heatmap_points = []
     for issue in issues:
         # Only include open/pending issues for heatmap visualization
-        if issue.status == "Resolved":
+        if issue["status"] == "Resolved":
             continue
-        if issue.latitude is None or issue.longitude is None:
+        if issue.get("latitude") is None or issue.get("longitude") is None:
             continue
 
-        weight = compute_issue_severity(issue, comment_counts.get(issue.id, 0), [])
+        weight = compute_issue_severity(issue, comment_counts.get(issue["issue_id"], 0), [])
         # Scale weight for better heatmap intensity (0-100 range)
         heatmap_intensity = min(weight * 8, 100)
         heatmap_points.append(
             {
-                "id": issue.id,
-                "title": issue.title,
-                "category": issue.category,
-                "lat": issue.latitude,
-                "lng": issue.longitude,
+                "id": issue["issue_id"],
+                "title": issue["title"],
+                "category": issue["category"],
+                "lat": issue["latitude"],
+                "lng": issue["longitude"],
                 "weight": weight,
                 "intensity": heatmap_intensity,
-                "status": issue.status,
+                "status": issue["status"],
             }
         )
 
     return heatmap_points
 
 
-def build_sla_status(issue, severity_score: float):
-    allowed_hours = SLA_HOURS.get(issue.category, 96)
+def build_sla_status(issue: dict, severity_score: float):
+    allowed_hours = SLA_HOURS.get(issue["category"], 96)
     if severity_score >= 10:
         allowed_hours = max(int(allowed_hours * 0.5), 12)
     elif severity_score >= 7:
         allowed_hours = max(int(allowed_hours * 0.75), 18)
 
-    elapsed_hours = max((datetime.utcnow() - issue.created_at).total_seconds() / 3600, 0)
-    overdue = issue.status != "Resolved" and elapsed_hours > allowed_hours
+    elapsed_hours = max((datetime.utcnow() - issue["created_at"]).total_seconds() / 3600, 0)
+    overdue = issue["status"] != "Resolved" and elapsed_hours > allowed_hours
 
     return {
         "allowed_hours": allowed_hours,
@@ -160,9 +170,10 @@ def build_sla_status(issue, severity_score: float):
     }
 
 
-def build_verification_summary(verifications):
+def build_verification_summary(verifications: list[dict]):
     totals = {"solved": 0, "not_solved": 0}
     for verification in verifications:
-        if verification.verdict in totals:
-            totals[verification.verdict] += 1
+        verdict = verification.get("verdict", "")
+        if verdict in totals:
+            totals[verdict] += 1
     return totals

@@ -1,7 +1,10 @@
 fastapi
 uvicorn[standard]
-sqlalchemy
+pymongo
 pydantic
 jinja2
 python-multipart
 python-dotenv
+cryptography
+itsdangerous
+slowapi

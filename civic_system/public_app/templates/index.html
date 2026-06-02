@@ -76,13 +76,13 @@
                 <div>
                     <h2>{{ issue.title }}</h2>
                     <p class="muted compact">
-                        {{ issue.category }} | {{ comment_counts.get(issue.id, 0) }} community comments | Severity {{ issue_severity.get(issue.id, 0) }}
+                        {{ issue.category }} | {{ comment_counts.get(issue.issue_id, 0) }} community comments | Severity {{ issue_severity.get(issue.issue_id, 0) }}
                     </p>
                 </div>
                 <span class="status-chip status-{{ issue.status|lower|replace(' ', '-') }}">{{ issue.status }}</span>
             </div>
 
-            {% set hotspot = issue_hotspots.get(issue.id) %}
+            {% set hotspot = issue_hotspots.get(issue.issue_id) %}
             {% if hotspot and hotspot.count > 1 %}
             <div class="info-box">
                 <strong>Duplicate hotspot detected</strong>
@@ -92,8 +92,8 @@
 
             <div class="meta-strip">
                 <span>Ward: {{ issue.ward or "Unassigned" }}</span>
-                <span>SLA: {{ sla_status.get(issue.id).elapsed_hours }} / {{ sla_status.get(issue.id).allowed_hours }} hrs</span>
-                {% if sla_status.get(issue.id).overdue %}
+                <span>SLA: {{ sla_status.get(issue.issue_id).elapsed_hours }} / {{ sla_status.get(issue.issue_id).allowed_hours }} hrs</span>
+                {% if sla_status.get(issue.issue_id).overdue %}
                 <span class="badge-danger">Overdue</span>
                 {% endif %}
             </div>
@@ -114,11 +114,12 @@
             {% endif %}
 
             <div class="meta-strip" style="margin-top:0.5rem; padding:0.85rem 0; border-top:1px solid #edf2ee; border-bottom:1px solid #edf2ee;">
-                <span><strong>{{ issue_upvotes.get(issue.id, 0) }}</strong> upvotes</span>
+                <span><strong>{{ issue_upvotes.get(issue.issue_id, 0) }}</strong> upvotes</span>
                 <span>
-                    <form action="/issue/{{ issue.id }}/upvote" method="post" style="display:inline-block; margin:0;">
-                        <button class="btn-secondary" type="submit" {% if issue.id in user_upvotes %}disabled{% endif %}>
-                            {% if issue.id in user_upvotes %}Upvoted{% else %}Upvote{% endif %}
+                    <form action="/issue/{{ issue.issue_id }}/upvote" method="post" style="display:inline-block; margin:0;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button class="btn-secondary" type="submit" {% if issue.issue_id in user_upvotes %}disabled{% endif %}>
+                            {% if issue.issue_id in user_upvotes %}Upvoted{% else %}Upvote{% endif %}
                         </button>
                     </form>
                 </span>
@@ -143,11 +144,11 @@
 
             <div class="comment-section">
                 <h3>Community comments</h3>
-                {% set comments = issue_comments.get(issue.id, []) %}
+                {% set comments = issue_comments.get(issue.issue_id, []) %}
                 {% if comments %}
                     {% for comment in comments %}
                     <div class="comment-card">
-                        <p><strong>{{ comment.commenter_name }}</strong> <span class="muted inline">{{ comment.commenter_email }}</span></p>
+                        <p><strong>{{ comment.commenter_name }}</strong> <span class="muted inline">{{ comment.commenter_email_enc[:12] }}…</span></p>
                         <p>{{ comment.body }}</p>
                     </div>
                     {% endfor %}
@@ -156,7 +157,8 @@
                 {% endif %}
 
                 {% if current_user %}
-                <form class="form-card compact-form" action="/issue/{{ issue.id }}/comments" method="post">
+                <form class="form-card compact-form" action="/issue/{{ issue.issue_id }}/comments" method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <p class="muted compact">Commenting as <strong>{{ current_user }}</strong>.</p>
                     <label>
                         Comment
@@ -190,13 +192,13 @@
                 <div>
                     <h2>{{ issue.title }}</h2>
                     <p class="muted compact">
-                        {{ issue.category }} | {{ comment_counts.get(issue.id, 0) }} community comments | Severity {{ issue_severity.get(issue.id, 0) }}
+                        {{ issue.category }} | {{ comment_counts.get(issue.issue_id, 0) }} community comments | Severity {{ issue_severity.get(issue.issue_id, 0) }}
                     </p>
                 </div>
                 <span class="status-chip status-{{ issue.status|lower|replace(' ', '-') }}">{{ issue.status }}</span>
             </div>
 
-            {% set hotspot = issue_hotspots.get(issue.id) %}
+            {% set hotspot = issue_hotspots.get(issue.issue_id) %}
             {% if hotspot and hotspot.count > 1 %}
             <div class="info-box">
                 <strong>Duplicate hotspot detected</strong>
@@ -223,7 +225,7 @@
             </div>
             {% endif %}
 
-            {% set summary = verification_summary.get(issue.id, {'solved': 0, 'not_solved': 0}) %}
+            {% set summary = verification_summary.get(issue.issue_id, {'solved': 0, 'not_solved': 0}) %}
             <div class="meta-strip" style="margin-top:0.5rem; padding:0.85rem 0; border-top:1px solid #edf2ee; border-bottom:1px solid #edf2ee;">
                 <span><strong>{{ summary.get('solved', 0) }}</strong> Solved (Upvotes) &nbsp; | &nbsp; <strong>{{ summary.get('not_solved', 0) }}</strong> Not Solved (Downvotes)</span>
             </div>
@@ -237,12 +239,12 @@
 
             <div class="comment-section">
                 <h3>Community Verification Comments</h3>
-                {% set verifications = issue_verifications.get(issue.id, []) %}
+                {% set verifications = issue_verifications.get(issue.issue_id, []) %}
                 {% if verifications %}
                     {% for v in verifications %}
                     <div class="comment-card">
                         <p>
-                            <strong>{{ v.verifier_name }}</strong> <span class="muted inline">{{ v.verifier_email }}</span>
+                            <strong>{{ v.verifier_name }}</strong>
                             {% if v.verdict == 'solved' %}
                                 <span class="status-chip status-resolved" style="margin-left:0.5rem;">Solved</span>
                             {% else %}
@@ -259,7 +261,8 @@
                 {% endif %}
 
                 {% if current_user %}
-                <form class="form-card compact-form" action="/issue/{{ issue.id }}/verify-resolution" method="post" enctype="multipart/form-data">
+                <form class="form-card compact-form" action="/issue/{{ issue.issue_id }}/verify-resolution" method="post" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <p class="muted compact">Verifying as <strong>{{ current_user }}</strong>.</p>
                     <input type="hidden" name="verifier_email" value="{{ current_user }}">
                     <label>

@@ -1,15 +1,23 @@
 """
 Seed script to populate sample civic issues across India.
-Run this script to initialize the database with sample data.
+Run this script to initialize the MongoDB database with sample data.
 """
 
 from datetime import datetime, timedelta
-from sqlalchemy.orm import Session
-from shared.database import SessionLocal, init_database
-from shared.models import Base, Issue, Comment, User
 
-# Initialize database
-init_database(Base)
+from shared.database import (
+    init_database,
+    issues_col,
+    comments_col,
+    users_col,
+    counters_col,
+    next_issue_id,
+)
+from shared.models import make_issue, make_comment, make_user
+from shared.security import encrypt_email, hash_email
+
+# Initialize database indexes and counters
+init_database()
 
 # Sample issues across India
 SAMPLE_ISSUES = [
@@ -85,89 +93,90 @@ SAMPLE_ISSUES = [
     },
 ]
 
+
 def seed_database():
-    """Populate the database with sample issues."""
-    db = SessionLocal()
-    
-    try:
-        # Check if data already exists
-        existing_count = db.query(Issue).count()
-        if existing_count > 0:
-            print(f"Database already contains {existing_count} issues. Skipping seed to avoid duplicates.")
-            print("To reseed, delete the database and run this script again.")
-            return
-        
-        # Add sample issues
-        print("Seeding sample issues...")
-        for issue_data in SAMPLE_ISSUES:
-            issue = Issue(
-                title=issue_data["title"],
-                category=issue_data["category"],
-                description=issue_data["description"],
-                address=issue_data["address"],
-                ward=issue_data["ward"],
-                latitude=issue_data["latitude"],
-                longitude=issue_data["longitude"],
-                location_label=issue_data["location_label"],
-                reporter_email=issue_data["reporter_email"],
-                image_path=issue_data["image_path"],
-                is_public=True,
-                status=issue_data["status"],
-                created_at=issue_data["created_at"],
+    """Populate the MongoDB database with sample issues."""
+
+    # Check if data already exists
+    existing_count = issues_col().count_documents({})
+    if existing_count > 0:
+        print(f"Database already contains {existing_count} issues. Skipping seed to avoid duplicates.")
+        print("To reseed, drop the 'urbanresolve' database and run this script again.")
+        return
+
+    # Reset the counter
+    counters_col().update_one({"_id": "issue_id"}, {"$set": {"seq": 0}}, upsert=True)
+
+    # Add sample issues
+    print("Seeding sample issues...")
+    for issue_data in SAMPLE_ISSUES:
+        issue_id = next_issue_id()
+        issue_doc = make_issue(
+            issue_id=issue_id,
+            title=issue_data["title"],
+            category=issue_data["category"],
+            description=issue_data["description"],
+            address=issue_data["address"],
+            ward=issue_data["ward"],
+            latitude=issue_data["latitude"],
+            longitude=issue_data["longitude"],
+            location_label=issue_data["location_label"],
+            reporter_email_enc=encrypt_email(issue_data["reporter_email"]),
+            image_path=issue_data["image_path"],
+            is_public=True,
+            status=issue_data["status"],
+            created_at=issue_data["created_at"],
+        )
+        issues_col().insert_one(issue_doc)
+        print(f"  ✓ Added: {issue_data['title']}")
+
+    # Add sample comments to first issue
+    first_issue = issues_col().find_one({}, sort=[("issue_id", 1)])
+    if first_issue:
+        sample_comments = [
+            {
+                "name": "Ramesh T.",
+                "email": "ramesh.t@gmail.com",
+                "body": "I hit this pothole yesterday and my bike got damaged. The repair cost me ₹3000. This needs immediate action!",
+            },
+            {
+                "name": "Deepa S.",
+                "email": "deepa.sharma@yahoo.com",
+                "body": "Yes, I also damaged my car suspension here last week. Multiple people have complained to me about this same spot.",
+            },
+        ]
+
+        for comment_data in sample_comments:
+            comment_doc = make_comment(
+                issue_id=first_issue["issue_id"],
+                commenter_name=comment_data["name"],
+                commenter_email_enc=encrypt_email(comment_data["email"]),
+                body=comment_data["body"],
             )
-            db.add(issue)
-            print(f"  ✓ Added: {issue.title}")
-        
-        db.commit()
-        
-        # Add sample comments to first issue
-        first_issue = db.query(Issue).first()
-        if first_issue:
-            sample_comments = [
-                {
-                    "name": "Ramesh T.",
-                    "email": "ramesh.t@gmail.com",
-                    "body": "I hit this pothole yesterday and my bike got damaged. The repair cost me ₹3000. This needs immediate action!",
-                },
-                {
-                    "name": "Deepa S.",
-                    "email": "deepa.sharma@yahoo.com",
-                    "body": "Yes, I also damaged my car suspension here last week. Multiple people have complained to me about this same spot.",
-                },
-            ]
-            
-            for comment_data in sample_comments:
-                comment = Comment(
-                    issue_id=first_issue.id,
-                    commenter_name=comment_data["name"],
-                    commenter_email=comment_data["email"],
-                    body=comment_data["body"],
-                )
-                db.add(comment)
-                print(f"  ✓ Added comment from {comment_data['name']}")
-        
-        db.commit()
-        
-        # Create users for the reporters
-        for issue_data in SAMPLE_ISSUES:
-            existing_user = db.query(User).filter(User.email == issue_data["reporter_email"]).first()
-            if not existing_user:
-                user = User(email=issue_data["reporter_email"], role="public")
-                db.add(user)
-        
-        db.commit()
-        
-        print("\n✅ Database seeding completed successfully!")
-        print(f"   Total issues added: {len(SAMPLE_ISSUES)}")
-        print("   Sample comments added to first issue")
-        print("   Reporter users created\n")
-        
-    except Exception as e:
-        db.rollback()
-        print(f"❌ Error seeding database: {e}")
-        raise
-    finally:
-        db.close()
+            comments_col().insert_one(comment_doc)
+            print(f"  ✓ Added comment from {comment_data['name']}")
+
+    # Create users for the reporters
+    all_emails = [issue_data["reporter_email"] for issue_data in SAMPLE_ISSUES]
+    all_emails.extend(["ramesh.t@gmail.com", "deepa.sharma@yahoo.com"])
+
+    for email in all_emails:
+        email_h = hash_email(email)
+        if not users_col().find_one({"email_hash": email_h}):
+            users_col().insert_one(make_user(email_hash=email_h, role="public"))
+
+    # Create a default admin user
+    admin_email = "chiragprasad0867@gmail.com"
+    admin_hash = hash_email(admin_email)
+    if not users_col().find_one({"email_hash": admin_hash}):
+        users_col().insert_one(make_user(email_hash=admin_hash, role="admin"))
+        print(f"  ✓ Created admin user: {admin_email}")
+
+    print("\n✅ Database seeding completed successfully!")
+    print(f"   Total issues added: {len(SAMPLE_ISSUES)}")
+    print("   Sample comments added to first issue")
+    print("   Reporter users created")
+    print(f"   Admin user created: {admin_email}\n")
 
 
 if __name__ == "__main__":

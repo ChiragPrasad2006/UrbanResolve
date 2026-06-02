@@ -1,4 +1,4 @@
-e {% extends "base.html" %}
+{% extends "base.html" %}
 {% block content %}
 
 <h1>Admin Login</h1>
@@ -6,6 +6,7 @@ e {% extends "base.html" %}
 
 <section class="auth-grid">
     <form class="form-card" action="/login/request-otp" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <label>
             Admin Email
             <input type="email" name="email" required value="{{ email or '' }}">
@@ -16,6 +17,7 @@ e {% extends "base.html" %}
     </form>
 
     <form class="form-card" action="/login/verify-otp" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <label>
             Email
             <input type="email" name="email" required value="{{ email or '' }}">

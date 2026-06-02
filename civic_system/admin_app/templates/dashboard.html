@@ -58,12 +58,12 @@
             </div>
 
             <div class="meta-strip">
-                <span>Severity {{ issue_severity.get(issue.id, 0) }}</span>
-                <span>SLA {{ sla_status.get(issue.id).elapsed_hours }} / {{ sla_status.get(issue.id).allowed_hours }} hrs</span>
-                {% if sla_status.get(issue.id).overdue %}
+                <span>Severity {{ issue_severity.get(issue.issue_id, 0) }}</span>
+                <span>SLA {{ sla_status.get(issue.issue_id).elapsed_hours }} / {{ sla_status.get(issue.issue_id).allowed_hours }} hrs</span>
+                {% if sla_status.get(issue.issue_id).overdue %}
                 <span class="badge-danger">Escalated overdue</span>
                 {% endif %}
-                {% set hotspot = issue_hotspots.get(issue.id) %}
+                {% set hotspot = issue_hotspots.get(issue.issue_id) %}
                 {% if hotspot and hotspot.count > 1 %}
                 <span class="badge-info">{{ hotspot.count }}-issue hotspot</span>
                 {% endif %}
@@ -94,7 +94,7 @@
 
             <div class="info-box">
                 <strong>Community support</strong>
-                {% set comments = issue_comments.get(issue.id, []) %}
+                {% set comments = issue_comments.get(issue.issue_id, []) %}
                 <p>{{ comments|length }} users commented on this issue.</p>
                 {% if comments %}
                     {% for comment in comments %}
@@ -106,11 +106,11 @@
                 {% endif %}
             </div>
 
-            {% set summary = verification_summary.get(issue.id, {"solved": 0, "not_solved": 0}) %}
+            {% set summary = verification_summary.get(issue.issue_id, {"solved": 0, "not_solved": 0}) %}
             <div class="info-box">
                 <strong>Trusted citizen verification</strong>
                 <p>Solved confirmations: {{ summary.solved }} | Not solved reports: {{ summary.not_solved }}</p>
-                {% set verifications = issue_verifications.get(issue.id, []) %}
+                {% set verifications = issue_verifications.get(issue.issue_id, []) %}
                 {% if verifications %}
                     {% for verification in verifications %}
                     <div class="comment-card">
@@ -137,7 +137,8 @@
             {% endif %}
 
             <form class="form-card compact-form" action="/issue/update" method="post" enctype="multipart/form-data">
-                <input type="hidden" name="issue_id" value="{{ issue.id }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="issue_id" value="{{ issue.issue_id }}">
 
                 <label>
                     Status
@@ -158,8 +159,8 @@
                     <textarea name="resolution_notes" rows="3" placeholder="Mention crew details, action taken, or site evidence notes.">{{ issue.admin_resolution_notes or "" }}</textarea>
                 </label>
 
-                <input type="hidden" name="resolution_latitude" id="resolution_latitude_{{ issue.id }}">
-                <input type="hidden" name="resolution_longitude" id="resolution_longitude_{{ issue.id }}">
+                <input type="hidden" name="resolution_latitude" id="resolution_latitude_{{ issue.issue_id }}">
+                <input type="hidden" name="resolution_longitude" id="resolution_longitude_{{ issue.issue_id }}">
 
                 <div>
                     <label>
@@ -171,21 +172,21 @@
                     </label>
                     <div
                         class="map-box resolution-map"
-                        id="resolution_map_{{ issue.id }}"
+                        id="resolution_map_{{ issue.issue_id }}"
                         data-issue-lat="{{ issue.latitude if issue.latitude is not none else '' }}"
                         data-issue-lng="{{ issue.longitude if issue.longitude is not none else '' }}"
                         data-resolution-lat="{{ issue.admin_resolution_latitude if issue.admin_resolution_latitude is not none else '' }}"
                         data-resolution-lng="{{ issue.admin_resolution_longitude if issue.admin_resolution_longitude is not none else '' }}"
-                        data-lat-input="resolution_latitude_{{ issue.id }}"
-                        data-lng-input="resolution_longitude_{{ issue.id }}"
+                        data-lat-input="resolution_latitude_{{ issue.issue_id }}"
+                        data-lng-input="resolution_longitude_{{ issue.issue_id }}"
                     ></div>
                     <div style="background: #f0fdf4; padding: 0.75rem; border-radius: 6px; margin-top: 0.75rem; font-size: 0.9rem; border-left: 3px solid var(--success);">
                         <strong style="color: var(--success);">✓ Coordinates auto-filled:</strong>
                         <p style="margin: 0.5rem 0 0;">
-                            Latitude: <code id="resolution_latitude_display_{{ issue.id }}" style="background: white; padding: 0.2rem 0.4rem; border-radius: 3px;">Click map to set</code>
+                            Latitude: <code id="resolution_latitude_display_{{ issue.issue_id }}" style="background: white; padding: 0.2rem 0.4rem; border-radius: 3px;">Click map to set</code>
                         </p>
                         <p style="margin: 0;">
-                            Longitude: <code id="resolution_longitude_display_{{ issue.id }}" style="background: white; padding: 0.2rem 0.4rem; border-radius: 3px;">Click map to set</code>
+                            Longitude: <code id="resolution_longitude_display_{{ issue.issue_id }}" style="background: white; padding: 0.2rem 0.4rem; border-radius: 3px;">Click map to set</code>
                         </p>
                     </div>
                 </div>
@@ -221,9 +222,9 @@
             </div>
 
             <div class="meta-strip">
-                <span>Severity {{ issue_severity.get(issue.id, 0) }}</span>
+                <span>Severity {{ issue_severity.get(issue.issue_id, 0) }}</span>
                 <span>Resolved at: {{ issue.resolved_at.strftime('%Y-%m-%d') if issue.resolved_at else 'Unknown' }}</span>
-                {% set hotspot = issue_hotspots.get(issue.id) %}
+                {% set hotspot = issue_hotspots.get(issue.issue_id) %}
                 {% if hotspot and hotspot.count > 1 %}
                 <span class="badge-info">{{ hotspot.count }}-issue hotspot</span>
                 {% endif %}
