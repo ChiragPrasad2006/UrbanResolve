@@ -108,7 +108,7 @@ def send_email(to_email: str, subject: str, body: str, attachments: list[str] | 
                 f"[EMAIL DEBUG] host={smtp_host} port={smtp_port} "
                 f"tls={use_tls} ssl={use_ssl} from={from_email} to={to_email}"
             )
-        with smtp_class(smtp_host, smtp_port, timeout=30) as server:
+        with smtp_class(smtp_host, smtp_port, timeout=30, source_address=('0.0.0.0', 0)) as server:
             if not use_ssl and use_tls:
                 server.starttls()
             if smtp_username and smtp_password:
