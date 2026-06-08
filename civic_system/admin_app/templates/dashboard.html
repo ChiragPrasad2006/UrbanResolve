@@ -405,6 +405,7 @@
                 // Show original issue location
                 if (Number.isFinite(issueLat) && Number.isFinite(issueLng)) {
                     L.marker([issueLat, issueLng], {
+                        icon: window._urbanResolveMarkerIcon,
                         title: 'Original issue location'
                     }).addTo(map).bindPopup('<strong>📍 Original Issue Location</strong>').openPopup();
                     
@@ -433,6 +434,7 @@
 
                     if (!adminMarker) {
                         adminMarker = L.marker([lat, lng], {
+                            icon: window._urbanResolveAdminMarkerIcon,
                             title: 'Your current location'
                         }).addTo(map).bindPopup('<strong>👤 Your current location</strong>').openPopup();
                     } else {

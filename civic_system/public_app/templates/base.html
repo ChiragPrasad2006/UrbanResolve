@@ -44,8 +44,21 @@
     crossorigin=""
 ></script>
 <script>
-    // Fix Leaflet's default icon path issue
-    L.Icon.Default.imagePath = 'https://unpkg.com/leaflet@1.9.4/dist/images/';
+    // Replace Leaflet's broken default icon with a self-contained SVG pin.
+    // This works on any host without needing external image files.
+    const _svgMarkerHtml = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 36" width="28" height="42">
+            <path d="M12 0C5.373 0 0 5.373 0 12c0 9 12 24 12 24S24 21 24 12C24 5.373 18.627 0 12 0z"
+                fill="#3b82f6" stroke="#1d4ed8" stroke-width="1.5"/>
+            <circle cx="12" cy="12" r="5" fill="white"/>
+        </svg>`;
+    window._urbanResolveMarkerIcon = L.divIcon({
+        html: _svgMarkerHtml,
+        className: '',
+        iconSize: [28, 42],
+        iconAnchor: [14, 42],
+        popupAnchor: [0, -42]
+    });
 </script>
 {% block extra_scripts %}{% endblock %}
 </body>

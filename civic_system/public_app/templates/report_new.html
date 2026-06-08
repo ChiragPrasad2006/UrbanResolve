@@ -108,7 +108,7 @@
         labelInput.value = label || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
 
         if (!marker) {
-            marker = L.marker([lat, lng]).addTo(map);
+            marker = L.marker([lat, lng], { icon: window._urbanResolveMarkerIcon }).addTo(map);
         } else {
             marker.setLatLng([lat, lng]);
         }
