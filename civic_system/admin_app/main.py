@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pymongo.database import Database
@@ -57,6 +57,11 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 app.mount("/uploads", StaticFiles(directory=str(BASE_DIR.parent / "shared" / "uploads")), name="uploads")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return Response(status_code=204)
 
 
 # ---------------------------------------------------------------------------
@@ -221,7 +226,13 @@ def admin_request_otp(request: Request, email: str = Form(...), db: Database = D
     )
     email_otps_col().insert_one(record)
 
-    send_email(email, "Admin Login OTP", f"Your admin OTP is: {otp}\nValid for 5 minutes.")
+    email_sent, email_message = send_email(email, "Admin Login OTP", f"Your admin OTP is: {otp}\nValid for 5 minutes.")
+    if not email_sent:
+        return render_template(
+            "login.html",
+            request,
+            {"email": email, "error": f"Could not send OTP email: {email_message}"},
+        )
     return render_template(
         "login.html",
         request,

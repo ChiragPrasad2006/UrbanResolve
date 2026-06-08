@@ -40,6 +40,13 @@ def _env_flag(name: str, default: str = "true") -> bool:
     return os.getenv(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _normalize_password(password: str | None) -> str | None:
+    if not password:
+        return password
+    # Gmail displays app passwords as four groups separated by spaces.
+    return "".join(password.split())
+
+
 def send_email(to_email: str, subject: str, body: str, attachments: list[str] | None = None) -> tuple[bool, str]:
     """
     Send a real email using SMTP configuration from environment variables.
@@ -47,7 +54,7 @@ def send_email(to_email: str, subject: str, body: str, attachments: list[str] | 
     smtp_host = os.getenv("SMTP_HOST")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_username = os.getenv("SMTP_USERNAME")
-    smtp_password = os.getenv("SMTP_PASSWORD")
+    smtp_password = _normalize_password(os.getenv("SMTP_PASSWORD"))
     from_email = os.getenv("SMTP_FROM_EMAIL", smtp_username or "noreply@urbanresolve.local")
     use_tls = _env_flag("SMTP_USE_TLS", "true")
     use_ssl = _env_flag("SMTP_USE_SSL", "false")
@@ -111,6 +118,15 @@ def send_email(to_email: str, subject: str, body: str, attachments: list[str] | 
         if debug:
             print(f"[EMAIL DEBUG] {msg}")
         return True, msg
+    except smtplib.SMTPAuthenticationError as exc:
+        msg = (
+            "SMTP authentication failed. For Gmail, use a 16-character Google App Password "
+            "with 2-Step Verification enabled, not your normal Gmail password."
+        )
+        if debug:
+            print(f"[EMAIL DEBUG] Raw SMTP auth error: {exc}")
+        print(f"[EMAIL ERROR] {msg}")
+        return False, msg
     except Exception as exc:
         msg = str(exc)
         print(f"[EMAIL ERROR] {msg}")

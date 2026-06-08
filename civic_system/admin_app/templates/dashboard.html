@@ -22,6 +22,9 @@
     <h3>Civic Heatmap Analytics</h3>
     <p class="muted compact">Recurring pothole, garbage, drainage, and other complaints are visualized below for admin-only planning.</p>
     <div id="adminHeatmap" class="map-box"></div>
+    <p id="adminHeatmapEmpty" class="muted compact" style="display:none; margin-top:0.75rem;">
+        No open issues with map coordinates are available for heatmap highlighting yet.
+    </p>
 </section>
 
 {% if hotspots %}
@@ -166,7 +169,7 @@
                     <label>
                         <strong>On-site Resolution Location</strong>
                         <p class="muted compact" style="margin: 0.5rem 0 0.75rem;">
-                            📍 Your current device location is shown on the map below. 
+                            Your current device location is requested before upload.
                             Upload evidence only when your device is within 300 meters of the issue location.
                         </p>
                     </label>
@@ -181,7 +184,7 @@
                         data-lng-input="resolution_longitude_{{ issue.issue_id }}"
                     ></div>
                     <div style="background: #f0fdf4; padding: 0.75rem; border-radius: 6px; margin-top: 0.75rem; font-size: 0.9rem; border-left: 3px solid var(--success);">
-                        <strong style="color: var(--success);">✓ Coordinates auto-filled:</strong>
+                        <strong style="color: var(--success);">Coordinates auto-filled from device location:</strong>
                         <p style="margin: 0.5rem 0 0;">
                             Latitude: <code id="resolution_latitude_display_{{ issue.issue_id }}" style="background: white; padding: 0.2rem 0.4rem; border-radius: 3px;">Click map to set</code>
                         </p>
@@ -290,19 +293,30 @@
                             ? '#2563eb'
                             : '#0f766e';
                         
-                        L.circleMarker([point.lat, point.lng], {
-                            radius: 12 + (point.weight * 3),
+                        L.circle([point.lat, point.lng], {
+                            radius: 250 + (point.intensity * 12),
                             color: color,
                             fillColor: color,
-                            fillOpacity: 0.75,
+                            fillOpacity: 0.28,
                             weight: 2,
-                            opacity: 0.9,
+                            opacity: 0.95,
                         }).addTo(heatmap).bindPopup(`<strong>${point.title}</strong><br>${point.category}<br>Severity ${point.weight}`);
+
+                        L.circleMarker([point.lat, point.lng], {
+                            radius: 7,
+                            color: '#ffffff',
+                            fillColor: color,
+                            fillOpacity: 1,
+                            weight: 2,
+                        }).addTo(heatmap);
                     });
 
                     if (bounds.length > 0) {
                         heatmap.fitBounds(bounds, { padding: [50, 50] });
                     }
+                } else {
+                    const empty = document.getElementById('adminHeatmapEmpty');
+                    if (empty) empty.style.display = 'block';
                 }
                 console.log('✓ Main heatmap initialized');
             } catch (error) {
@@ -482,22 +496,6 @@
                     return;
                 }
 
-                if (adminLocation) {
-                    const distance = computeDistanceMeters(adminLocation.lat, adminLocation.lng, issueLat, issueLng);
-                    console.log('Using cached admin location:', adminLocation.lat, adminLocation.lng, 'distance_m=', Math.round(distance));
-                    if (distance > 300) {
-                        alert(`Upload blocked: your current device location is ${Math.round(distance)}m from the reported issue. Upload must be within 300m.`);
-                        return;
-                    }
-                    submitWithCoords(adminLocation.lat, adminLocation.lng);
-                    return;
-                }
-
-                if (!navigator.geolocation) {
-                    alert('Geolocation is not available in this browser. Please use a device with location services enabled.');
-                    return;
-                }
-
                 const submitWithCoords = (lat, lng) => {
                     // Fill hidden resolution inputs inside this form
                     const latInput = form.querySelector('input[name="resolution_latitude"]');
@@ -517,6 +515,11 @@
                     // Now submit the form
                     form.submit();
                 };
+
+                if (!navigator.geolocation) {
+                    alert('Geolocation is not available in this browser. Please use a device with location services enabled.');
+                    return;
+                }
 
                 navigator.geolocation.getCurrentPosition(function (position) {
                     const lat = position.coords.latitude;
