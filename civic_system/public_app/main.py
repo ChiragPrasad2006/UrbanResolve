@@ -51,6 +51,8 @@ from shared.security import (
     unsign_session,
     validate_csrf_token,
     verify_otp,
+    hash_password,
+    verify_password,
 )
 
 init_database()
@@ -99,7 +101,15 @@ def render_template(name: str, request: Request, context: dict):
 def ensure_public_user(email: str):
     email_h = hash_email(email)
     if not users_col().find_one({"email_hash": email_h}):
-        users_col().insert_one(make_user(email_hash=email_h, role="public"))
+        username = email.split("@")[0]
+        users_col().insert_one(make_user(
+            email_hash=email_h,
+            encrypted_email=encrypt_email(email),
+            username=username,
+            username_lower=username.lower(),
+            password_hash="",
+            role="public"
+        ))
 
 
 def build_issue_context(current_user: str | None = None):
@@ -190,16 +200,142 @@ def issues_page(request: Request, db: Database = Depends(get_db)):
     return render_issue_feed(request)
 
 
+@app.get("/signup")
+def signup_page(request: Request):
+    return render_template("signup.html", request, {})
+
+
+@app.post("/signup")
+@limiter.limit("5/minute")
+def signup_route(
+    request: Request,
+    email: str = Form(...),
+    username: str = Form(...),
+    password: str = Form(...),
+    csrf_token: str = Form(""),
+    db: Database = Depends(get_db)
+):
+    if not validate_csrf_token(csrf_token):
+        return render_template("signup.html", request, {"error": "Invalid CSRF token. Please try again."})
+        
+    email = sanitize_input(email, max_length=254)
+    username = sanitize_input(username, max_length=50)
+    
+    email_h = hash_email(email)
+    username_lower = username.lower()
+    
+    existing_user = users_col().find_one({
+        "$or": [
+            {"email_hash": email_h},
+            {"username_lower": username_lower}
+        ]
+    })
+    
+    if existing_user:
+        return render_template(
+            "signup.html", 
+            request, 
+            {"email": email, "username": username, "error": "Email or Username already exists."}
+        )
+        
+    encrypted_email = encrypt_email(email)
+    password_h = hash_password(password)
+    
+    users_col().insert_one(make_user(
+        email_hash=email_h,
+        encrypted_email=encrypted_email,
+        username=username,
+        username_lower=username_lower,
+        password_hash=password_h,
+        role="public"
+    ))
+    
+    response = render_issue_feed(request, success="Account created successfully! You are now logged in.")
+    response.set_cookie(
+        key="urbanresolve_user",
+        value=sign_session(email),
+        httponly=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 7,
+    )
+    return response
+
+
 @app.get("/login")
 def login_page(request: Request):
     return render_template("login.html", request, {})
 
 
+@app.post("/login")
+@limiter.limit("5/minute")
+def login_route(
+    request: Request,
+    identifier: str = Form(...),
+    password: str = Form(""),
+    csrf_token: str = Form(""),
+    db: Database = Depends(get_db)
+):
+    if not validate_csrf_token(csrf_token):
+        return render_template("login.html", request, {"identifier": identifier, "error": "Invalid CSRF token. Please try again."})
+        
+    identifier = sanitize_input(identifier, max_length=254)
+    identifier_lower = identifier.lower()
+    
+    email_h = hash_email(identifier)
+    user = users_col().find_one({
+        "$or": [
+            {"email_hash": email_h},
+            {"username_lower": identifier_lower}
+        ]
+    })
+    
+    if not user:
+        return render_template("login.html", request, {"identifier": identifier, "error": "Invalid credentials."})
+        
+    if not user.get("password_hash") or not verify_password(password, user["password_hash"]):
+        return render_template("login.html", request, {"identifier": identifier, "error": "Invalid credentials."})
+        
+    try:
+        user_email = decrypt_email(user["encrypted_email"])
+    except Exception:
+        user_email = identifier if "@" in identifier else ""
+        
+    response = render_issue_feed(request, success="Login successful")
+    response.set_cookie(
+        key="urbanresolve_user",
+        value=sign_session(user_email),
+        httponly=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 7,
+    )
+    return response
+
+
 @app.post("/login/request-otp")
 @limiter.limit("5/minute")
-def request_otp_route(request: Request, email: str = Form(...), db: Database = Depends(get_db)):
-    email = sanitize_input(email, max_length=254)
-    csrf = request._form.get("csrf_token", "") if hasattr(request, "_form") else ""
+def request_otp_route(request: Request, identifier: str = Form(...), csrf_token: str = Form(""), db: Database = Depends(get_db)):
+    if not validate_csrf_token(csrf_token):
+        return render_template("login.html", request, {"identifier": identifier, "error": "Invalid CSRF token."})
+        
+    identifier = sanitize_input(identifier, max_length=254)
+
+    email_h = hash_email(identifier)
+    user = users_col().find_one({
+        "$or": [
+            {"email_hash": email_h},
+            {"username_lower": identifier.lower()}
+        ]
+    })
+    
+    if not user:
+        return render_template("login.html", request, {"identifier": identifier, "error": "User not found."})
+
+    try:
+        email = decrypt_email(user["encrypted_email"])
+    except Exception:
+        email = identifier if "@" in identifier else ""
+        if not email:
+            return render_template("login.html", request, {"identifier": identifier, "error": "Email address missing for this user."})
 
     otp = generate_otp()
     otp_h = hash_otp(otp)
@@ -216,24 +352,46 @@ def request_otp_route(request: Request, email: str = Form(...), db: Database = D
         return render_template(
             "login.html",
             request,
-            {"email": email, "error": f"Could not send OTP email: {email_message}"},
+            {"identifier": identifier, "error": f"Could not send OTP email: {email_message}"},
         )
     return render_template(
         "login.html",
         request,
-        {"email": email, "message": "OTP sent to your email", "otp_requested": True},
+        {"identifier": identifier, "message": "OTP sent to your email", "otp_requested": True},
     )
 
 
 @app.post("/login/verify-otp")
+@limiter.limit("5/minute")
 def verify_otp_route(
     request: Request,
-    email: str = Form(...),
+    identifier: str = Form(...),
     otp: str = Form(...),
+    csrf_token: str = Form(""),
     db: Database = Depends(get_db),
 ):
-    email = sanitize_input(email, max_length=254)
+    if not validate_csrf_token(csrf_token):
+        return render_template("login.html", request, {"identifier": identifier, "error": "Invalid CSRF token.", "otp_requested": True})
+        
+    identifier = sanitize_input(identifier, max_length=254)
     otp = sanitize_input(otp, max_length=6)
+    
+    email_h = hash_email(identifier)
+    user = users_col().find_one({
+        "$or": [
+            {"email_hash": email_h},
+            {"username_lower": identifier.lower()}
+        ]
+    })
+    
+    if not user:
+        return render_template("login.html", request, {"identifier": identifier, "error": "User not found.", "otp_requested": True})
+        
+    try:
+        email = decrypt_email(user["encrypted_email"])
+    except Exception:
+        email = identifier if "@" in identifier else ""
+        
     email_h = hash_email(email)
 
     record = email_otps_col().find_one(
@@ -244,7 +402,7 @@ def verify_otp_route(
         return render_template(
             "login.html",
             request,
-            {"email": email, "error": "Invalid or expired OTP", "otp_requested": True},
+            {"identifier": identifier, "error": "Invalid or expired OTP", "otp_requested": True},
         )
 
     otp_valid = verify_otp(otp, record["otp_hash"]) and datetime.utcnow() < record["expires_at"]
@@ -252,7 +410,7 @@ def verify_otp_route(
         return render_template(
             "login.html",
             request,
-            {"email": email, "error": "Invalid or expired OTP", "otp_requested": True},
+            {"identifier": identifier, "error": "Invalid or expired OTP", "otp_requested": True},
         )
 
     ensure_public_user(email)
@@ -281,6 +439,7 @@ def report_page(request: Request):
 
 
 @app.post("/report/new")
+@limiter.limit("5/minute")
 def submit_report(
     request: Request,
     title: str = Form(...),
@@ -294,8 +453,12 @@ def submit_report(
     email: str = Form(...),
     image: UploadFile = File(None),
     video: UploadFile = File(None),
+    csrf_token: str = Form(""),
     db: Database = Depends(get_db),
 ):
+    if not validate_csrf_token(csrf_token):
+        return render_template("report_new.html", request, {"error": "Invalid CSRF token. Please try again."})
+        
     # Sanitize inputs
     title = sanitize_input(title, max_length=200)
     category = sanitize_input(category, max_length=50)
@@ -350,12 +513,17 @@ def submit_report(
 
 
 @app.post("/issue/{issue_id}/comments")
+@limiter.limit("10/minute")
 def add_comment(
     issue_id: int,
     request: Request,
     body: str = Form(...),
+    csrf_token: str = Form(""),
     db: Database = Depends(get_db),
 ):
+    if not validate_csrf_token(csrf_token):
+        return render_issue_feed(request, error="Invalid CSRF token.")
+        
     current_user = get_current_user(request)
     if not current_user:
         return render_issue_feed(request, error="Please log in before commenting.")
@@ -379,11 +547,16 @@ def add_comment(
 
 
 @app.post("/issue/{issue_id}/upvote")
+@limiter.limit("20/minute")
 def upvote_issue(
     request: Request,
     issue_id: int,
+    csrf_token: str = Form(""),
     db: Database = Depends(get_db),
 ):
+    if not validate_csrf_token(csrf_token):
+        return render_issue_feed(request, error="Invalid CSRF token.")
+        
     current_user = get_current_user(request)
     if not current_user:
         return render_issue_feed(request, error="Please log in to upvote issues.")
@@ -402,16 +575,23 @@ def upvote_issue(
 
 
 @app.post("/issue/{issue_id}/verify-resolution")
+@limiter.limit("5/minute")
 def verify_resolution(
     issue_id: int,
     request: Request,
-    verifier_name: str = Form(...),
-    verifier_email: str = Form(...),
     verdict: str = Form(...),
     note: str = Form(""),
     image: UploadFile = File(None),
+    csrf_token: str = Form(""),
     db: Database = Depends(get_db),
 ):
+    if not validate_csrf_token(csrf_token):
+        return render_issue_feed(request, error="Invalid CSRF token.")
+        
+    current_user = get_current_user(request)
+    if not current_user:
+        return render_issue_feed(request, error="Please log in to verify this resolution.")
+        
     issue = issues_col().find_one({"issue_id": issue_id, "is_public": True})
     if not issue:
         return render_issue_feed(request, error="Issue not found.")
@@ -419,20 +599,27 @@ def verify_resolution(
     if issue["status"] != "Resolved":
         return render_issue_feed(request, error="Citizen verification opens only after admins mark the issue as resolved.")
 
-    verifier_name = sanitize_input(verifier_name, max_length=100)
-    verifier_email = sanitize_input(verifier_email, max_length=254)
+    try:
+        user_doc = users_col().find_one({"email_hash": hash_email(current_user)})
+        verifier_name = user_doc.get("username", "Citizen") if user_doc else "Citizen"
+        verifier_email_enc = user_doc.get("encrypted_email", encrypt_email(current_user)) if user_doc else encrypt_email(current_user)
+    except:
+        verifier_name = "Citizen"
+        verifier_email_enc = encrypt_email(current_user)
+
     verdict = sanitize_input(verdict, max_length=20)
     note = sanitize_input(note, max_length=2000)
 
     verification_doc = make_resolution_verification(
         issue_id=issue_id,
         verifier_name=verifier_name,
-        verifier_email_enc=encrypt_email(verifier_email),
+        verifier_email_enc=verifier_email_enc,
         verdict=verdict,
         note=note,
         image_path=save_upload(image, "verification_images"),
     )
     resolution_verifications_col().insert_one(verification_doc)
-    ensure_public_user(verifier_email)
+
+    return render_issue_feed(request, success="Resolution verification submitted.")
 
     return render_issue_feed(request, success=f"Verification recorded for '{issue['title']}'.")

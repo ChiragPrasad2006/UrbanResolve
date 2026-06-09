@@ -42,6 +42,7 @@ from shared.security import (
     unsign_session,
     validate_csrf_token,
     verify_otp,
+    verify_password,
 )
 
 init_database()
@@ -207,20 +208,84 @@ def admin_login_page(request: Request):
     return render_template("login.html", request, {})
 
 
+@app.post("/login")
+@limiter.limit("5/minute")
+def admin_login_route(
+    request: Request,
+    identifier: str = Form(...),
+    password: str = Form(""),
+    csrf_token: str = Form(""),
+    db: Database = Depends(get_db)
+):
+    if not validate_csrf_token(csrf_token):
+        return render_template("login.html", request, {"identifier": identifier, "error": "Invalid CSRF token. Please try again."})
+        
+    identifier = sanitize_input(identifier, max_length=254)
+    identifier_lower = identifier.lower()
+
+    email_h = hash_email(identifier)
+    admin = users_col().find_one({
+        "$or": [
+            {"email_hash": email_h},
+            {"username_lower": identifier_lower}
+        ],
+        "role": "admin"
+    })
+
+    if not admin:
+        return render_template("login.html", request, {"identifier": identifier, "error": "Invalid credentials or unauthorized."})
+
+    if not admin.get("password_hash") or not verify_password(password, admin["password_hash"]):
+        return render_template("login.html", request, {"identifier": identifier, "error": "Invalid credentials."})
+
+    try:
+        admin_email = decrypt_email(admin["encrypted_email"])
+    except Exception:
+        admin_email = identifier if "@" in identifier else ""
+
+    response = load_dashboard_context(request, success="Admin login successful")
+    response.set_cookie(
+        key="urbanresolve_admin",
+        value=sign_session(admin_email),
+        httponly=True,
+        samesite="lax",
+        max_age=60 * 60 * 8,
+    )
+    return response
+
+
 @app.post("/login/request-otp")
 @limiter.limit("5/minute")
-def admin_request_otp(request: Request, email: str = Form(...), db: Database = Depends(get_db)):
-    email = sanitize_input(email, max_length=254)
-    email_h = hash_email(email)
+def admin_request_otp(request: Request, identifier: str = Form(...), csrf_token: str = Form(""), db: Database = Depends(get_db)):
+    if not validate_csrf_token(csrf_token):
+        return render_template("login.html", request, {"identifier": identifier, "error": "Invalid CSRF token."})
+        
+    identifier = sanitize_input(identifier, max_length=254)
+    email_h = hash_email(identifier)
 
-    admin = users_col().find_one({"email_hash": email_h, "role": "admin"})
+    admin = users_col().find_one({
+        "$or": [
+            {"email_hash": email_h},
+            {"username_lower": identifier.lower()}
+        ],
+        "role": "admin"
+    })
+    
     if not admin:
-        return render_template("login.html", request, {"email": email, "error": "Unauthorized admin email"})
+        return render_template("login.html", request, {"identifier": identifier, "error": "Unauthorized admin"})
+
+    try:
+        email = decrypt_email(admin["encrypted_email"])
+    except Exception:
+        email = identifier if "@" in identifier else ""
+        if not email:
+            return render_template("login.html", request, {"identifier": identifier, "error": "Email address missing for this user."})
 
     otp = generate_otp()
     otp_h = hash_otp(otp)
+    email_h_real = hash_email(email)
     record = make_email_otp(
-        email_hash=email_h,
+        email_hash=email_h_real,
         otp_hash=otp_h,
         expires_at=datetime.utcnow() + timedelta(minutes=5),
     )
@@ -231,39 +296,57 @@ def admin_request_otp(request: Request, email: str = Form(...), db: Database = D
         return render_template(
             "login.html",
             request,
-            {"email": email, "error": f"Could not send OTP email: {email_message}"},
+            {"identifier": identifier, "error": f"Could not send OTP email: {email_message}"},
         )
     return render_template(
         "login.html",
         request,
-        {"email": email, "message": "OTP sent to admin email", "otp_requested": True},
+        {"identifier": identifier, "message": "OTP sent to admin email", "otp_requested": True},
     )
 
 
 @app.post("/login/verify-otp")
+@limiter.limit("5/minute")
 def admin_verify_otp(
     request: Request,
-    email: str = Form(...),
+    identifier: str = Form(...),
     otp: str = Form(...),
+    csrf_token: str = Form(""),
     db: Database = Depends(get_db),
 ):
-    email = sanitize_input(email, max_length=254)
+    if not validate_csrf_token(csrf_token):
+        return render_template("login.html", request, {"identifier": identifier, "error": "Invalid CSRF token.", "otp_requested": True})
+        
+    identifier = sanitize_input(identifier, max_length=254)
     otp = sanitize_input(otp, max_length=6)
-    email_h = hash_email(email)
+    email_h = hash_email(identifier)
 
-    admin = users_col().find_one({"email_hash": email_h, "role": "admin"})
+    admin = users_col().find_one({
+        "$or": [
+            {"email_hash": email_h},
+            {"username_lower": identifier.lower()}
+        ],
+        "role": "admin"
+    })
     if not admin:
-        return render_template("login.html", request, {"error": "Unauthorized admin"})
+        return render_template("login.html", request, {"identifier": identifier, "error": "Unauthorized admin"})
+
+    try:
+        email = decrypt_email(admin["encrypted_email"])
+    except Exception:
+        email = identifier if "@" in identifier else ""
+
+    email_h_real = hash_email(email)
 
     record = email_otps_col().find_one(
-        {"email_hash": email_h},
+        {"email_hash": email_h_real},
         sort=[("_id", -1)],
     )
     if not record:
         return render_template(
             "login.html",
             request,
-            {"email": email, "error": "Invalid or expired OTP", "otp_requested": True},
+            {"identifier": identifier, "error": "Invalid or expired OTP", "otp_requested": True},
         )
 
     otp_valid = verify_otp(otp, record["otp_hash"]) and datetime.utcnow() < record["expires_at"]
@@ -271,7 +354,7 @@ def admin_verify_otp(
         return render_template(
             "login.html",
             request,
-            {"email": email, "error": "Invalid or expired OTP", "otp_requested": True},
+            {"identifier": identifier, "error": "Invalid or expired OTP", "otp_requested": True},
         )
 
     response = load_dashboard_context(request, success="Admin login successful")
@@ -301,6 +384,7 @@ def admin_dashboard(request: Request, db: Database = Depends(get_db)):
 
 
 @app.post("/issue/update")
+@limiter.limit("20/minute")
 def update_issue_status(
     request: Request,
     issue_id: int = Form(...),
@@ -310,8 +394,12 @@ def update_issue_status(
     resolution_latitude: str = Form(""),
     resolution_longitude: str = Form(""),
     resolution_video: UploadFile = File(None),
+    csrf_token: str = Form(""),
     db: Database = Depends(get_db),
 ):
+    if not validate_csrf_token(csrf_token):
+        return load_dashboard_context(request, error="Invalid CSRF token.")
+        
     current_admin = get_current_admin(request)
     if not current_admin:
         return RedirectResponse(url="/login", status_code=303)

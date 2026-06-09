@@ -264,11 +264,6 @@
                 <form class="form-card compact-form" action="/issue/{{ issue.issue_id }}/verify-resolution" method="post" enctype="multipart/form-data">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <p class="muted compact">Verifying as <strong>{{ current_user }}</strong>.</p>
-                    <input type="hidden" name="verifier_email" value="{{ current_user }}">
-                    <label>
-                        Your Name
-                        <input type="text" name="verifier_name" placeholder="Enter your name" required>
-                    </label>
                     <label>
                         Is it resolved?
                         <select name="verdict" required>

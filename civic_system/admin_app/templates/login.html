@@ -3,7 +3,7 @@
 {% block content %}
 
 <h1>Admin Login</h1>
-<p class="muted">Authorized personnel can sign in with email OTP.</p>
+<p class="muted">Authorized personnel can sign in below.</p>
 
 <section class="auth-shell">
     {% if message %}
@@ -14,31 +14,62 @@
     <p class="error">{{ error }}</p>
     {% endif %}
 
-    <form
-        class="form-card auth-card"
-        action="{% if otp_requested %}/login/verify-otp{% else %}/login/request-otp{% endif %}"
-        method="post"
-    >
+    <form class="form-card auth-card" action="{% if otp_requested %}/login/verify-otp{% else %}/login{% endif %}" method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
+        {% if not otp_requested %}
         <label>
-            Admin Email
-            <input type="email" name="email" required value="{{ email or '' }}" autocomplete="email">
+            Admin Identifier (Email or Username)
+            <input type="text" name="identifier" required value="{{ identifier or '' }}" autocomplete="username">
+        </label>
+        
+        <label>
+            Password
+            <div style="position: relative; display: flex; align-items: center;">
+                <input type="password" name="password" id="password" autocomplete="current-password" style="padding-right: 40px; width: 100%;">
+                <button type="button" onclick="togglePassword('password', 'eye-icon-login')" style="position: absolute; right: 10px; background: none; border: none; cursor: pointer; padding: 0; display: flex; align-items: center; color: var(--muted);">
+                    <svg id="eye-icon-login" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </button>
+            </div>
         </label>
 
-        {% if otp_requested %}
-        <label>
-            Enter OTP
-            <input type="text" name="otp" maxlength="6" inputmode="numeric" required autofocus>
-        </label>
-        {% endif %}
-
-        <div class="form-actions auth-actions">
-            <button class="btn-submit">
-                {% if otp_requested %}Verify OTP{% else %}Send OTP{% endif %}
+        <div style="display: flex; justify-content: flex-start; margin-top: -0.5rem; margin-bottom: 0.5rem;">
+            <button type="submit" formaction="/login/request-otp" style="background: none; border: none; color: var(--primary-dark); padding: 0; font-family: 'Segoe UI', sans-serif; cursor: pointer; text-decoration: none; font-weight: 600;">
+                Verify through 2FA
             </button>
         </div>
+
+        <div class="form-actions auth-actions">
+            <button class="btn-submit">Sign In</button>
+        </div>
+        {% else %}
+        
+        <label>
+            Enter OTP sent to admin email
+            <input type="text" name="otp" maxlength="6" inputmode="numeric" required autofocus>
+            <input type="hidden" name="identifier" value="{{ identifier }}">
+        </label>
+        
+        <div class="form-actions auth-actions">
+            <button class="btn-submit">Verify OTP</button>
+        </div>
+        {% endif %}
     </form>
 </section>
 
+{% if not otp_requested %}
+<script>
+function togglePassword(inputId, iconId) {
+    var input = document.getElementById(inputId);
+    var icon = document.getElementById(iconId);
+    if (input.type === "password") {
+        input.type = "text";
+        icon.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>';
+    } else {
+        input.type = "password";
+        icon.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
+    }
+}
+</script>
+{% endif %}
 {% endblock %}

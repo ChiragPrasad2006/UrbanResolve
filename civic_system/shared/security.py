@@ -12,6 +12,7 @@ import string
 
 from cryptography.fernet import Fernet
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+import bcrypt
 
 # ---------------------------------------------------------------------------
 # Environment-loaded secrets (loaded once at import time via dotenv)
@@ -175,3 +176,19 @@ def sanitize_input(value: str, max_length: int = 5000) -> str:
     if not value:
         return value
     return value.strip().replace("\x00", "")[:max_length]
+
+
+# ---------------------------------------------------------------------------
+# Password Hashing
+# ---------------------------------------------------------------------------
+
+def hash_password(password: str) -> str:
+    """Hash a plaintext password using bcrypt."""
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a plaintext password against its bcrypt hash."""
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))

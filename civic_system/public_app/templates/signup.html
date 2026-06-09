@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block body_class %}auth-page{% endblock %}
+{% block content %}
+
+<h1>Sign Up</h1>
+<p class="muted">Join UrbanResolve to start tracking civic issues.</p>
+
+<section class="auth-shell">
+    {% if error %}
+    <p class="error">{{ error }}</p>
+    {% endif %}
+
+    <form class="form-card auth-card" action="/signup" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>
+            Email
+            <input type="email" name="email" required value="{{ email or '' }}" autocomplete="email">
+        </label>
+        
+        <label>
+            Username
+            <input type="text" name="username" required value="{{ username or '' }}" autocomplete="username">
+        </label>
+        
+        <label>
+            Password
+            <div style="position: relative; display: flex; align-items: center;">
+                <input type="password" name="password" id="password" required autocomplete="new-password" style="padding-right: 40px; width: 100%;">
+                <button type="button" onclick="togglePassword('password', 'eye-icon-signup')" style="position: absolute; right: 10px; background: none; border: none; cursor: pointer; padding: 0; display: flex; align-items: center; color: var(--muted);">
+                    <svg id="eye-icon-signup" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </button>
+            </div>
+        </label>
+
+        <div class="form-actions auth-actions">
+            <button class="btn-submit">Create Account</button>
+        </div>
+        
+        <div style="text-align: center; margin-top: 1.5rem; font-family: 'Segoe UI', sans-serif;">
+            Already have an account? <a href="/login" style="color: var(--primary-dark); font-weight: 600; text-decoration: none;">Sign In</a>
+        </div>
+    </form>
+</section>
+
+<script>
+function togglePassword(inputId, iconId) {
+    var input = document.getElementById(inputId);
+    var icon = document.getElementById(iconId);
+    if (input.type === "password") {
+        input.type = "text";
+        icon.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>';
+    } else {
+        input.type = "password";
+        icon.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
+    }
+}
+</script>
+{% endblock %}

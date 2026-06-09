@@ -10,10 +10,21 @@ Each function returns a dict ready for pymongo insert_one().
 from datetime import datetime
 
 
-def make_user(email_hash: str, role: str = "public") -> dict:
+def make_user(
+    email_hash: str, 
+    encrypted_email: str, 
+    username: str, 
+    username_lower: str, 
+    password_hash: str, 
+    role: str = "public"
+) -> dict:
     """Create a User document."""
     return {
         "email_hash": email_hash,
+        "encrypted_email": encrypted_email,
+        "username": username,
+        "username_lower": username_lower,
+        "password_hash": password_hash,
         "role": role,
         "created_at": datetime.utcnow(),
     }

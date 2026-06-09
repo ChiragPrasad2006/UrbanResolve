@@ -101,8 +101,9 @@ def init_database():
     """
     db = get_database()
 
-    # Users — unique email hash
+    # Users — unique email hash and unique username_lower
     db["users"].create_index("email_hash", unique=True)
+    db["users"].create_index("username_lower", unique=True, sparse=True)
 
     # Issues — ascending by created_at for feed ordering
     db["issues"].create_index([("created_at", ASCENDING)])
